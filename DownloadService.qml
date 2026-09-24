@@ -74,9 +74,13 @@ Item {
 
   // ---------- persistence ----------
   function persist() {
+    writeProc.command = [
+      "bash", "-c", 'mkdir -p "$1" && printf "%s" "$3" > "$2"',
+      "dm-write", root.configDir, root.queuePath,
+      JSON.stringify({ settings: root.settings, downloads: root.downloads }) + "\n"
+    ]
     root._persistPending = false
-    var q = { settings: root.settings, downloads: root.downloads }
-    writeProc.content = JSON.stringify(q) + "\n"
+    if (writeProc.running) { root._persistPending = true; return }
     writeProc.running = true
   }
 
@@ -558,15 +562,21 @@ Item {
 
   readonly property string _eventsScript: "\n" +
     '  rt="$1"\n' +
-    '  if [ -f "$rt/cli.jsonl" ]; then\n' +
-    '    echo "===CLI==="\n' +
-    '    cat "$rt/cli.jsonl"\n' +
-    '    : > "$rt/cli.jsonl"\n' +
+    '  if [ -f "$rt/cli.jsonl" ] && [ ! -f "$rt/cli.jsonl.proc" ]; then\n' +
+    '    mv "$rt/cli.jsonl" "$rt/cli.jsonl.proc"\n' +
     '  fi\n' +
-    '  if [ -f "$rt/clipboard.jsonl" ]; then\n' +
+    '  if [ -f "$rt/cli.jsonl.proc" ]; then\n' +
+    '    echo "===CLI==="\n' +
+    '    cat "$rt/cli.jsonl.proc"\n' +
+    '    rm -f "$rt/cli.jsonl.proc"\n' +
+    '  fi\n' +
+    '  if [ -f "$rt/clipboard.jsonl" ] && [ ! -f "$rt/clipboard.jsonl.proc" ]; then\n' +
+    '    mv "$rt/clipboard.jsonl" "$rt/clipboard.jsonl.proc"\n' +
+    '  fi\n' +
+    '  if [ -f "$rt/clipboard.jsonl.proc" ]; then\n' +
     '    echo "===CLIP==="\n' +
-    '    cat "$rt/clipboard.jsonl"\n' +
-    '    : > "$rt/clipboard.jsonl"\n' +
+    '    cat "$rt/clipboard.jsonl.proc"\n' +
+    '    rm -f "$rt/clipboard.jsonl.proc"\n' +
     '  fi\n'
 
   // ---------- Processes ----------
@@ -595,11 +605,8 @@ Item {
 
   Process {
     id: writeProc
-    property string content: ""
-    command: ["bash", "-c", 'mkdir -p "$1" && cat > "$2"', "dm-write", root.configDir, root.queuePath]
-    stdinEnabled: true
-    onStarted: function() {
-      writeProc.write(writeProc.content)
+    onExited: function(code) {
+      if (root._persistPending) root.persist()
     }
   }
 
