@@ -1,0 +1,4 @@
+# Qt/Quickshell compiled caches
+*.qmlc
+*.qml.qmlc
+.qmlcache/

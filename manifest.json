@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "omakid.download-manager",
+  "name": "Download Manager",
+  "version": "1.0.0",
+  "author": "omakid",
+  "license": "MIT",
+  "description": "IDM-style download manager for the Omarchy bar: aria2 engine, parallel slots, pause/resume, clipboard detection, and an 'omarchy-dl' CLI.",
+  "kinds": [
+    "bar-widget",
+    "service"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml",
+    "service": "DownloadService.qml"
+  },
+  "barWidget": {
+    "displayName": "Download Manager",
+    "description": "Download files like IDM straight from the bar",
+    "category": "Utilities",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
