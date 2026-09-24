@@ -38,7 +38,7 @@ request() {
   local payload="{\"op\":\"$op\",\"ts\":$(now_ms)"
   local key val
   while (( $# > 0 )); do
-    key="$1"; shift
+    key="${1#--}"; shift
     val="$1"; shift
     case "$key" in
       url|dir|id|filename) payload="$payload,$(encode "$key"):$(encode "$val")" ;;
@@ -53,30 +53,30 @@ request() {
 
 print_state_label() {
   case "$1" in
-    active) echo "aktif" ;;
-    paused) echo "dijeda" ;;
-    queued) echo "antre" ;;
-    completed) echo "selesai" ;;
-    error) echo "gagal" ;;
-    cancelled) echo "batal" ;;
+    active) echo "active" ;;
+    paused) echo "paused" ;;
+    queued) echo "queued" ;;
+    completed) echo "done" ;;
+    error) echo "failed" ;;
+    cancelled) echo "canceled" ;;
     *) echo "$1" ;;
   esac
 }
 
 cmd_list() {
-  [[ -f "$QUEUE" ]] || { echo "Belum ada download."; exit 0; }
+  [[ -f "$QUEUE" ]] || { echo "No downloads yet."; exit 0; }
   python3 - "$QUEUE" <<'PY'
 import json, os, sys
 path = sys.argv[1]
 try:
     data = json.load(open(path))
 except Exception:
-    print("Belum ada download.")
+    print("No downloads yet.")
     sys.exit(0)
-labels = {"active":"aktif","paused":"dijeda","queued":"antre","completed":"selesai","error":"gagal","cancelled":"batal"}
+labels = {"active":"active","paused":"paused","queued":"queued","completed":"done","error":"failed","cancelled":"canceled"}
 rows = data.get("downloads", [])
 if not rows:
-    print("Belum ada download.")
+    print("No downloads yet.")
     sys.exit(0)
 for r in rows:
     st = r.get("state","queued")
@@ -86,17 +86,17 @@ PY
 
 cmd_add() {
   local url="${1:-}"
-  [[ -n "$url" ]] || { echo "Gunakan: omarchy-dl <url> [--dir D] [--segments N] [--speed KB]" >&2; exit 1; }
+  [[ -n "$url" ]] || { echo "Usage: omarchy-dl <url> [--dir D] [--segments N] [--speed KB]" >&2; exit 1; }
   shift
   request "add" url "$url" "$@"
-  echo "Permintaan tambah dikirim: $url"
+  echo "Add request sent: $url"
 }
 
 cmd_action() {
   local op="$1" id="${2:-}"
-  [[ -n "$id" ]] || { echo "omega-dl: $op memerlukan <id>" >&2; exit 1; }
+  [[ -n "$id" ]] || { echo "omarchy-dl: $op requires <id>" >&2; exit 1; }
   request "$op" id "$id"
-  echo "Permintaan $op dikirim untuk $id"
+  echo "$op request sent for $id"
 }
 
 case "${1:-}" in
@@ -104,20 +104,20 @@ case "${1:-}" in
     cat <<'EOF'
 Download Manager CLI — omarchy-dl
 
-  omarchy-dl <url> [--dir D] [--segments N] [--speed KB]   tambah download
+  omarchy-dl <url> [--dir D] [--segments N] [--speed KB]   add a download
   omarchy-dl list
   omarchy-dl pause <id> | resume <id> | cancel <id> | retry <id>
   omarchy-dl open <id>
   omarchy-dl clear
 
-Contoh:
+Examples:
   omarchy-dl "https://example.com/file.iso"
   omarchy-dl "https://example.com/file.iso" --dir ~/Downloads --segments 8
 EOF
     exit 0
     ;;
   list) cmd_list ;;
-  clear) request "clear"; echo "Perintah clear dikirim." ;;
+  clear) request "clear"; echo "Clear command sent." ;;
   open) cmd_action "open" "${2:-}" ;;
   pause) cmd_action "pause" "${2:-}" ;;
   resume) cmd_action "resume" "${2:-}" ;;
@@ -125,7 +125,7 @@ EOF
   retry) cmd_action "retry" "${2:-}" ;;
   *)
     if [[ "$1" == --* || "$1" == - ]]; then
-      echo "URL tidak valid: $1" >&2; exit 1
+      echo "Invalid URL: $1" >&2; exit 1
     fi
     cmd_add "$@"
     ;;

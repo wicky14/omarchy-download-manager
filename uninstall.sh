@@ -26,7 +26,7 @@ ok()    { printf '\033[1;32m✓\033[0m %s\n' "$1"; }
 
 confirm() {
   if command -v gum >/dev/null 2>&1; then
-    gum confirm --default=false "$1" --affirmative="Hapus" --negative="Batal"
+    gum confirm --default=false "$1" --affirmative="Remove" --negative="Cancel"
     return $?
   fi
   printf '\033[1;33m%s [y/N]\033[0m ' "$1"
@@ -35,50 +35,50 @@ confirm() {
 }
 
 main() {
-  info "Memulai uninstall lengkap $PLUGIN_ID"
+  info "Starting full uninstall of $PLUGIN_ID"
 
   echo
-  echo "Yang akan dilakukan:"
-  echo "  1. Menghentikan semua download aria2 yang sedang berjalan"
-  echo "  2. Menghapus runtime  : $RUNTIME"
-  echo "  3. Menghapus konfigurasi: $CONFIG_DIR (riwayat antrean ikut terhapus)"
-  echo "  4. Menghapus symlink CLI: $CLI_BIN"
-  echo "  5. Mencopot plugin dari Omarchy (folder + entry bar)"
+  echo "This will:"
+  echo "  1. Stop all running aria2 downloads"
+  echo "  2. Remove the runtime directory  : $RUNTIME"
+  echo "  3. Remove the config directory   : $CONFIG_DIR (your download history will be deleted too)"
+  echo "  4. Remove the CLI symlink        : $CLI_BIN"
+  echo "  5. Remove the plugin from Omarchy (folder + bar entry)"
   echo
 
-  confirm "Lanjut menghapus Download Manager?" || {
-    red "Dibatalkan."
+  confirm "Remove Download Manager?" || {
+    red "Canceled."
     exit 1
   }
 
   # 1. stop everything running
-  info "Menghentikan download aktif & clipboard watcher..."
+  info "Stopping active downloads & clipboard watcher..."
   bash "$SCRIPT_DIR/dm-dl.sh" cancel-all 2>/dev/null || true
   bash "$SCRIPT_DIR/clipwatch.sh" stop 2>/dev/null || true
   sleep 0.3
 
   # 2. remove runtime + config
-  info "Menghapus runtime & konfigurasi..."
+  info "Removing runtime & config..."
   rm -rf "$RUNTIME" 2>/dev/null || true
   rm -rf "$CONFIG_DIR" 2>/dev/null || true
 
   # 3. remove CLI symlink
-  info "Menghapus symlink CLI..."
+  info "Removing CLI symlink..."
   rm -f "$CLI_BIN" 2>/dev/null || true
 
   # 4. plugin remove (this handles bar entry + plugin folder)
-  info "Mencopot plugin dari Omarchy..."
+  info "Removing the plugin from Omarchy..."
   if omarchy plugin remove "$PLUGIN_ID" --yes 2>/dev/null; then
-    ok "Plugin dicopot."
+    ok "Plugin removed."
   else
-    warn "Gagal mencopot via 'omarchy plugin remove'."
-    warn "Jalankan manual: omarchy plugin remove $PLUGIN_ID"
+    warn "Failed to remove via 'omarchy plugin remove'."
+    warn "Run it manually: omarchy plugin remove $PLUGIN_ID"
   fi
 
   echo
-  ok "Selesai \u2014 Download Manager telah dihapus sepenuhnya."
-  info "Restart shell bila perlu: omarchy restart shell"
+  ok "Done \u2014 Download Manager has been fully removed."
+  info "Restart the shell if needed: omarchy restart shell"
 }
 
-trap 'red "Dibatalkan."; exit 1' INT
+trap 'red "Canceled."; exit 1' INT
 main "$@"

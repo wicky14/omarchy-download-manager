@@ -39,17 +39,17 @@ cmd_run() {
 
 cmd_start() {
   command -v wl-paste >/dev/null 2>&1 || {
-    echo "clipwatch.sh: wl-paste tidak ditemukan (paket wl-clipboard)" >&2
+    echo "clipwatch.sh: wl-paste not found (install wl-clipboard)" >&2
     exit 1
   }
   mkdir -p "$RUNTIME"
   if cmd_is_running; then
-    echo "clipwatch.sh: sudah berjalan"
+    echo "clipwatch.sh: already running"
     exit 0
   fi
   setsid bash "$0" run >> "$RUNTIME/clipwatch.log" 2>&1 &
   echo "$!" > "$RUNTIME/clipwatch.pid"
-  echo "clipwatch.sh: mulai"
+  echo "clipwatch.sh: started"
   exit 0
 }
 
@@ -61,7 +61,7 @@ cmd_stop() {
     kill "$pid" 2>/dev/null || true
   fi
   rm -f "$RUNTIME/clipwatch.pid" "$RUNTIME/clipwatch.last"
-  echo "clipwatch.sh: berhenti"
+  echo "clipwatch.sh: stopped"
   exit 0
 }
 

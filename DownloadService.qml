@@ -197,7 +197,7 @@ Item {
       if (d.id === id) {
         var copy = JSON.parse(JSON.stringify(d))
         copy.state = "error"
-        copy.error = message || "terhenti"
+        copy.error = message || "stopped"
         next.push(copy)
       } else {
         next.push(d)
@@ -402,7 +402,7 @@ Item {
       var e = root.downloads[j]
       if (e.state !== "active" && e.state !== "paused") continue
       if (alive[e.id] === true) continue
-      root._setError(e.id, "terhenti saat restart \u2014 retry untuk melanjutkan")
+      root._setError(e.id, "stopped on restart \u2014 retry to continue")
       changed = true
     }
     if (changed) root.persist()
@@ -462,10 +462,10 @@ Item {
         root._setState(e.id, "cancelled", false)
         changed = true
       } else if (st && st.state === "error") {
-        root._setError(e.id, st.error || "gagal")
+        root._setError(e.id, st.error || "failed")
         changed = true
       } else if (st && st.state === "active" && !isAlive && now - (st.ts * 1000) > 20000) {
-        root._setError(e.id, "terhenti \u2014 retry untuk melanjutkan")
+        root._setError(e.id, "stopped \u2014 retry to continue")
         changed = true
       }
       if (st && st.ts) {
@@ -667,7 +667,7 @@ Item {
       root.aria2Missing = (code !== 0)
       if (root.aria2Missing && !root._ariaNotified) {
         root._ariaNotified = true
-        root.notify("Download Manager", "aria2 tidak terpasang \u2014 jalankan 'omarchy pkg add aria2'")
+        root.notify("Download Manager", "aria2 is not installed \u2014 run 'omarchy pkg add aria2'")
       }
     }
   }

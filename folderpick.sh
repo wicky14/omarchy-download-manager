@@ -9,7 +9,7 @@
 
 set -uo pipefail
 
-title="${1:-Pilih folder download}"
+title="${1:-Choose download folder}"
 
 if ! command -v gdbus >/dev/null 2>&1; then
   echo "gdbus is required (glib2)" >&2
@@ -20,7 +20,7 @@ handle_token="dm_folder_${RANDOM}_${RANDOM}"
 portaldest="org.freedesktop.portal.Desktop"
 portalobj="/org/freedesktop/portal/desktop"
 
-opts="{'handle_token': <'$handle_token'>, 'accept_label': <'Pilih'>, 'directory': <true>, 'title': <'$title'>}"
+opts="{'handle_token': <'$handle_token'>, 'accept_label': <'Select'>, 'directory': <true>, 'title': <'$title'>}"
 
 req_line="$(
   timeout 10 gdbus call --session \
@@ -32,7 +32,7 @@ req_line="$(
 
 req_path="$(printf '%s' "$req_line" | sed -n "s/.*'\(\/org\/freedesktop\/portal\/desktop\/request\/[^']*\)'.*/\1/p")"
 if [[ -z $req_path ]]; then
-  echo "Gagal membuka folder picker" >&2
+  echo "Failed to open folder picker" >&2
   exit 1
 fi
 

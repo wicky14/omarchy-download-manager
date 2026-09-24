@@ -1,152 +1,154 @@
 # Download Manager (omarchy)
 
-Download manager ala IDM untuk bar Omarchy — unduh file langsung dari tombol di
-top bar, CLI, atau deteksi URL dari clipboard.
+An IDM-style download manager for the Omarchy bar: download files directly from
+a button in the top bar, from the CLI, or via clipboard URL detection.
 
-- **Mesin**: aria2 (multi-koneksi, resume, pause)
-- **Kontrol**: panel bar widget, CLI `omarchy-dl`, watcher clipboard
-- **Antrean**: beberapa slot paralel, jeda/lanjut, retry, batas kecepatan
-- **Persisten**: antrean tersimpan di disk, resume setelah restart shell/PC
+- **Engine**: aria2 (multi-connection, resume, pause)
+- **Control**: bar widget panel, `omarchy-dl` CLI, clipboard watcher
+- **Queue**: parallel slots, pause/resume, retry, speed limits
+- **Persistent**: queue is stored on disk and survives shell/PC restarts
 
-## Dependensi
+## Dependencies
 
-- `aria2c` (wajib). Pasang lewat:
+- `aria2c` (required). Install it with:
 
   ```
   omarchy pkg add aria2
   ```
 
-- `wl-paste` dari paket `wl-clipboard` (untuk deteksi URL clipboard).
-- `gdbus` dari paket `glib2` (untuk pemilih folder via portal).
+- `wl-paste` from the `wl-clipboard` package (for clipboard URL detection).
+- `gdbus` from the `glib2` package (for the portal folder picker).
 
-## Pemasangan
+## Installation
 
-Repositori ini dipasang seperti plugin Omarchy lain:
+Install this repository like any other Omarchy plugin:
 
 ```
 omarchy plugin add <git-url-repo> --enable
 ```
 
-Prompt interaktif dipakai untuk konfirmasi; `--enable` agar langsung aktif.
-`omarchy plugin add` menolak duplikat (id `omakid.download-manager`).
+An interactive prompt is used for confirmation; `--enable` activates it
+immediately. `omarchy plugin add` rejects duplicates (id
+`omakid.download-manager`).
 
-Setelah aktif, tombol ikon unduh `` muncul di bar: klik kiri membuka panel,
-klik kanan untuk jeda/lanjut semua.
+Once active, a download icon `` appears in the bar: left-click opens the
+panel, right-click pauses/resumes all.
 
-## Penggunaan
+## Usage
 
 ### Panel (bar widget)
 
-1. Tempel URL direct (http/https) di kolom paling atas, klik **Tambah**.
-2. Pilih folder tujuan dengan tombol folder (portal system); nilai default
-   diambil dari setelan `defaultDir` (`~/Downloads`).
-3. Atur **Slot** (jumlah download berjalan), **Segmen** (koneksi per file), dan
-   **Batas Kecepatan** lewat slider di bawah form.
-4. Jika URL ter-copy saat clipboard watcher aktif, muncul blok "URL DARI
-   KLIPBOARD" dengan tombol **Tambah** / tutup.
-5. Setiap baris berisi nama file, progress bar, persen, meta (kecepatan/ETA),
-   dan tombol aksi sesuai status:
-   - *aktif*: jeda / batal
-   - *dijeda*: lanjut / batal
-   - *antre*: batal
-   - *selesai*: buka folder / hapus
-   - *gagal / batal*: coba lagi / hapus
-6. Footer menampilkan ringkasan dan tombol **Bersihkan** untuk menghapus
-   entri yang sudah berstatus akhir.
+1. Paste a direct URL (http/https) into the field at the top, click **Add**.
+2. Choose the destination folder with the folder button (system portal); the
+   default is taken from the `defaultDir` setting (`~/Downloads`).
+3. Adjust **Slots** (number of parallel downloads), **Segments** (connections
+   per file), and **Speed Limit** with the sliders below the form.
+4. If a URL is copied while the clipboard watcher is active, a "URL FROM
+   CLIPBOARD" block appears with **Add** / close buttons.
+5. Each row shows the file name, progress bar, percentage, meta
+   (speed/ETA), and status-dependent action buttons:
+   - *active*: pause / cancel
+   - *paused*: resume / cancel
+   - *queued*: cancel
+   - *done*: open folder / remove
+   - *failed / canceled*: retry / remove
+6. The footer shows a summary and a **Clear** button to remove all entries in
+   a final state.
 
 ### CLI (`omarchy-dl`)
 
-Symlink `~/.local/bin/omarchy-dl` dibuat otomatis oleh service saat plugin
-dijalankan. Perintah:
+The `~/.local/bin/omarchy-dl` symlink is created automatically by the service
+when the plugin runs. Commands:
 
 ```
-omarchy-dl "https://contoh.com/file.iso"              # tambah ke antrean
-omarchy-dl "https://contoh.com/a.iso" --dir ~/ISO      # folder tujuan
-omarchy-dl "https://contoh.com/a.iso" --segments 8 --speed 500
-omarchy-dl list                                        # daftar antrean
+omarchy-dl "https://example.com/file.iso"              # add to queue
+omarchy-dl "https://example.com/a.iso" --dir ~/ISO      # destination folder
+omarchy-dl "https://example.com/a.iso" --segments 8 --speed 500
+omarchy-dl list                                        # list the queue
 omarchy-dl pause <id> | resume <id> | cancel <id> | retry <id>
-omarchy-dl open <id>                                   # buka folder file selesai
-omarchy-dl clear                                       # bersihkan status akhir
+omarchy-dl open <id>                                   # open folder of a finished file
+omarchy-dl clear                                       # clear final-state entries
 ```
 
-## Arsitektur
+## Architecture
 
 ```
-BarWidget.qml       Tombol + panel (KeyboardPanel). Hanya UI, status dari service.
-DownloadService.qml Pemilik antrean + setelan, penjadwal slot, watcher CLI/klip.
-dm-dl.sh            Pembungkus satu download: spawn aria2c detached (setsid),
-                    parse ringkasan via dm-status.awk, tulis status.json atomik,
-                    notification via notify-send. pause/resume = SIGSTOP/SIGCONT.
-dm-status.awk       Parser gawk untuk baris ringkasan aria2c
+BarWidget.qml       Button + panel (KeyboardPanel). UI only; state comes from the service.
+DownloadService.qml Owns the queue + settings, slot scheduler, CLI/clipboard watchers.
+dm-dl.sh            Per-download wrapper: spawns detached aria2c (setsid), parses
+                    summaries via dm-status.awk, writes status.json atomically, sends
+                    notifications via notify-send. pause/resume = SIGSTOP/SIGCONT.
+dm-status.awk       gawk parser for aria2c summary lines
                     ([#gid done/tot(pct%) CN:n DL:speed ETA:...]).
-clipwatch.sh        wl-paste --watch -> clipboard.jsonl (di runtime).
-folderpick.sh       Pemilih folder via xdg-desktop-portal (gdbus).
-dm-cli.sh           Front-end CLI; hanya menulis request ke cli.jsonl.
-uninstall.sh        Uninstall lengkap interaktif.
+clipwatch.sh        wl-paste --watch -> clipboard.jsonl (in the runtime dir).
+folderpick.sh       Folder picker via xdg-desktop-portal (gdbus).
+dm-cli.sh           CLI front-end; only writes requests to cli.jsonl.
+uninstall.sh        Full interactive uninstall.
 ```
 
-### Alur event (tanpa race)
+### Event flow (race-free)
 
-- CLI **tidak** menulis file antrean; ia menambah satu baris JSON (op) ke
+- The CLI does **not** write the queue file; it appends one JSON (op) line to
   `$XDG_RUNTIME_DIR/omarchy-download-manager/cli.jsonl`.
-- Service menge-tali file tersebut tiap 2 detik, mengeksekusi op, dan menulis
-  `queue.json` (satu-satunya penulis). Watcher clipboard menulis
-  `clipboard.jsonl`; service hanya menampilkan prompt "tambah?" di panel.
-- Ringkasan kemajuan ditulis oleh `dm-dl.sh` ke
-  `$XDG_RUNTIME_DIR/omarchy-download-manager/<id>.status.json` (tmp+mv atomik);
-  service membacanya utuh per-poll.
+- The service tails that file every 2 seconds, executes the ops, and is the
+  sole writer of `queue.json`. The clipboard watcher writes `clipboard.jsonl`;
+  the service only shows an "Add?" prompt in the panel.
+- Progress summaries are written by `dm-dl.sh` to
+  `$XDG_RUNTIME_DIR/omarchy-download-manager/<id>.status.json` (tmp+mv atomic);
+  the service reads them whole per poll.
 
 ### Resume & restart
 
-- `aria2c` dijalankan dengan `--continue=true` dan file `.aria2` di folder
-  tujuan; jeda di shell tidak membatalkan progress.
-- Wrapper didetach (setsid) sehingga selamat dari restart shell/PC. Pada boot,
-  service melakukan rekonsiliasi: entri `paused`/`active` yang tidak ada
-  wrapper-nya ditandai `error` dengan pesan "retry untuk melanjutkan" —
-  klik **coba lagi** (atau `retry <id>`) meneruskan dari posisi terhenti.
+- `aria2c` runs with `--continue=true` and a `.aria2` control file in the
+  destination folder; pausing the shell does not cancel progress.
+- The wrapper is detached (setsid) so it survives shell/PC restarts. On boot
+  the service reconciles: `paused`/`active` entries without a live wrapper are
+  marked `error` with "retry to continue" — click **retry** (or `retry <id>`)
+  to resume from where it stopped.
 
-## Penyimpanan
+## Storage
 
-| Hal | Lokasi |
+| Thing | Location |
 | --- | ------ |
-| Antrean & setelan | `~/.config/omarchy/omakid.download-manager/queue.json` |
-| Status per download | `$XDG_RUNTIME_DIR/omarchy-download-manager/*.status.json` |
-| Pid wrapper / aria2 | `$XDG_RUNTIME_DIR/omarchy-download-manager/*.pid` |
-| Request CLI | `.../cli.jsonl` · clipboard `.../clipboard.jsonl` |
-| Symlink CLI | `~/.local/bin/omarchy-dl` |
+| Queue & settings | `~/.config/omarchy/omakid.download-manager/queue.json` |
+| Per-download status | `$XDG_RUNTIME_DIR/omarchy-download-manager/*.status.json` |
+| Wrapper / aria2 pids | `$XDG_RUNTIME_DIR/omarchy-download-manager/*.pid` |
+| CLI requests | `.../cli.jsonl` · clipboard `.../clipboard.jsonl` |
+| CLI symlink | `~/.local/bin/omarchy-dl` |
 
-## Pencopotan
+## Uninstall
 
-Hanya mencopot plugin (folder + entry bar) secara aman:
+Remove the plugin only (folder + bar entry) safely:
 
 ```
 omarchy plugin remove omakid.download-manager
 ```
 
-Uninstall penuh (memberhentikan download, menghapus runtime + konfigurasi +
-symlink CLI, lalu mencopot plugin):
+Full uninstall (stops downloads, removes runtime + config + CLI symlink, then
+removes the plugin):
 
 ```
 ./uninstall.sh
 ```
 
-## Pengembangan
+## Development
 
-Validasi struktur sebelum dipasang:
-
-```
-omarchy plugin validate /path/ke/repo-ini
-```
-
-Pasang dari folder untuk uji cepat:
+Validate the structure before installing:
 
 ```
-omarchy plugin add file:///path/ke/repo-ini --enable --yes
+omarchy plugin validate /path/to/repo
 ```
 
-Hapus plugin dari `~/.config/omarchy/plugins`, lalu `omarchy restart shell` —
-entri bar ikut bersih (dicek via `PluginRegistry.setEnabled(false)`).
+Install from a folder for quick testing:
 
-## Lisensi
+```
+omarchy plugin add file:///path/to/repo --enable --yes
+```
+
+Remove the plugin from `~/.config/omarchy/plugins`, then
+`omarchy restart shell` — the bar entry is cleaned up too (checked via
+`PluginRegistry.setEnabled(false)`).
+
+## License
 
 MIT &copy; 2026 omakid

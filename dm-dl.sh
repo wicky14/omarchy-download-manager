@@ -47,17 +47,17 @@ read_int() {
 aria2_rc_msg() {
   local rc="$1"
   case "$rc" in
-    1) echo "kesalahan umum" ;;
+    1) echo "unknown error" ;;
     2) echo "timeout" ;;
-    3) echo "resource tidak ditemukan (404)" ;;
-    4) echo "melebihi batas ukuran file" ;;
-    5) echo "kecepatan terlalu lambat" ;;
-    6) echo "masalah jaringan" ;;
-    7) echo "dibatalkan" ;;
-    8) echo "source terlalu cepat berubah / konflik logik" ;;
-    11) echo "disk penuh / tidak bisa menulis" ;;
-    12) echo "checksum tidak cocok" ;;
-    *) echo "kode exit aria2 $rc" ;;
+    3) echo "resource not found (404)" ;;
+    4) echo "file size exceeds the set limit" ;;
+    5) echo "transfer speed too slow" ;;
+    6) echo "network problem" ;;
+    7) echo "canceled" ;;
+    8) echo "server file changed too quickly / logic conflict" ;;
+    11) echo "disk full / cannot write" ;;
+    12) echo "checksum mismatch" ;;
+    *) echo "aria2 exit code $rc" ;;
   esac
 }
 
@@ -80,8 +80,8 @@ cmd_run() {
   write_status "$id" active 0 0 -1 0 -1 ""
 
   if ! command -v aria2c >/dev/null 2>&1; then
-    write_status "$id" error 0 0 -1 0 -1 "aria2c tidak terpasang (omarchy pkg add aria2)"
-    echo "aria2c tidak terpasang" >&2
+    write_status "$id" error 0 0 -1 0 -1 "aria2c is not installed (omarchy pkg add aria2)"
+    echo "aria2c is not installed" >&2
     exit 1
   fi
 
@@ -140,20 +140,25 @@ cmd_run() {
 
   local done="" total="" pct=""
   local sf="$RUNTIME/$id.status.json"
-  [[ -f "$sf" ]] && {
-    done=$(read_int "$sf" completed); total=$(read_int "$sf" total); pct=$(read_int "$sf" percent)
-  }
-  done=${done:-0}; total=${total:-0}; pct=${pct:-0}
-  if [[ $state == "completed" && $total -le 0 ]]; then total=$done; fi
-  if [[ $state == "completed" ]]; then pct=100; fi
+  if [[ $state == "completed" ]]; then
+    done=$(stat -c %s "$dir/$file" 2>/dev/null || echo 0)
+    total=$done
+    pct=100
+  else
+    [[ -f "$sf" ]] && {
+      done=$(read_int "$sf" completed); total=$(read_int "$sf" total); pct=$(read_int "$sf" percent)
+    }
+  fi
+  done=${done:-0}; total=${total:-0}; pct=${pct:--1}
+  if [[ $state != "completed" && $total -le 0 ]]; then total=$done; fi
 
   write_status "$id" "$state" "$done" "$total" "$pct" 0 -1 "$msg"
 
   if command -v notify-send >/dev/null 2>&1; then
     if [[ $state == "completed" ]]; then
-      notify-send -a "Download Manager" -i "emblem-downloads" "Download selesai" "$file" 2>/dev/null || true
+      notify-send -a "Download Manager" -i "emblem-downloads" "Download complete" "$file" 2>/dev/null || true
     elif [[ $state == "error" ]]; then
-      notify-send -a "Download Manager" -i "dialog-error" "Download gagal" "$file — $msg" 2>/dev/null || true
+      notify-send -a "Download Manager" -i "dialog-error" "Download failed" "$file — $msg" 2>/dev/null || true
     fi
   fi
 

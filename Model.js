@@ -40,7 +40,7 @@ function formatEta(sec) {
   var h = Math.floor(s / 3600)
   var m = Math.floor((s % 3600) / 60)
   var r = s % 60
-  if (h > 0) return h + "j " + m + "m"
+  if (h > 0) return h + "h " + m + "m"
   return m + ":" + (r < 10 ? "0" : "") + r
 }
 
@@ -121,13 +121,13 @@ function describe(entry, status) {
     return formatBytes(done) + speed + eta
   }
   if (state === "paused") {
-    if (p >= 0) return "dijeda · " + formatBytes(done) + " / " + formatBytes(total)
-    return "dijeda"
+    if (p >= 0) return "paused \u00b7 " + formatBytes(done) + " / " + formatBytes(total)
+    return "paused"
   }
-  if (state === "queued") return "antre (slot penuh)"
-  if (state === "completed") return "Selesai · " + (total > 0 ? formatBytes(total) : formatBytes(done))
-  if (state === "cancelled") return "Dibatalkan"
-  if (state === "error") return "Gagal" + (entry.error ? ": " + entry.error : "")
+  if (state === "queued") return "queued (slots full)"
+  if (state === "completed") return "Done \u00b7 " + (total > 0 ? formatBytes(total) : formatBytes(done))
+  if (state === "cancelled") return "Canceled"
+  if (state === "error") return "Failed" + (entry.error ? ": " + entry.error : "")
   return state
 }
 

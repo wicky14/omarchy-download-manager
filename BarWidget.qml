@@ -24,24 +24,24 @@ BarWidget {
   function close() { popupOpen = false }
 
   function summaryText() {
-    if (!svc || !svc.ready) return "memuat\u2026"
+    if (!svc || !svc.ready) return "loading\u2026"
     if (svc.activeCount > 0) {
-      var s = svc.activeCount + " aktif"
+      var s = svc.activeCount + " active"
       if (svc.queuedCount > 0) s += " +" + svc.queuedCount
       if (svc.totalSpeed > 0) s += " \u00b7 " + Model.formatSpeed(svc.totalSpeed)
       return s
     }
-    if (svc.pausedCount > 0) return svc.pausedCount + " dijeda"
-    if (svc.completedCount + svc.errorCount + svc.cancelledCount === 0) return "siap"
-    return "0 aktif"
+    if (svc.pausedCount > 0) return svc.pausedCount + " paused"
+    if (svc.completedCount + svc.errorCount + svc.cancelledCount === 0) return "idle"
+    return "0 active"
   }
 
   function footerText() {
     if (!svc) return ""
     var parts = []
-    if (svc.completedCount > 0) parts.push(svc.completedCount + " selesai")
-    if (svc.errorCount > 0) parts.push(svc.errorCount + " gagal")
-    if (svc.cancelledCount > 0) parts.push(svc.cancelledCount + " batal")
+    if (svc.completedCount > 0) parts.push(svc.completedCount + " done")
+    if (svc.errorCount > 0) parts.push(svc.errorCount + " failed")
+    if (svc.cancelledCount > 0) parts.push(svc.cancelledCount + " canceled")
     return parts.join(" \u00b7 ")
   }
 
@@ -56,16 +56,16 @@ BarWidget {
   function addCurrent() {
     var u = urlField.text.trim()
     if (!Model.isValidUrl(u)) {
-      root.addMsg = "URL tidak valid."
+      root.addMsg = "Invalid URL."
       return
     }
     var ok = svc ? svc.addUrl(u, root.pickDir) : false
     if (ok) {
       urlField.text = ""
-      root.addMsg = "Ditambahkan ke antrean."
+      root.addMsg = "Added to the queue."
       addMsgTimer.restart()
     } else {
-      root.addMsg = "URL sudah ada di daftar."
+      root.addMsg = "This URL is already in the list."
     }
   }
 
@@ -90,7 +90,7 @@ BarWidget {
     bar: root.bar
     text: "\uf019" + ((svc && svc.activeCount > 0) ? " " + svc.activeCount : "")
     fontSize: Style.font.caption
-    tooltipText: "Download Manager\nKlik kiri: panel\nKlik kanan: jeda/lanjut semua"
+    tooltipText: "Download Manager\nLeft click: panel\nRight click: pause/resume all"
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.LeftButton) root.popupOpen = !root.popupOpen
       else if (buttonCode === Qt.RightButton) root.toggleAll()
@@ -138,7 +138,7 @@ BarWidget {
                 anchors.leftMargin: Style.space(10)
                 anchors.verticalCenter: parent.verticalCenter
                 textFormat: Text.PlainText
-                text: "URL DARI KLIPBOARD"
+                text: "URL FROM CLIPBOARD"
                 color: Qt.darker(root.bar.foreground, 1.3)
                 font.family: root.bar.fontFamily
                 font.pixelSize: Style.font.caption
@@ -169,7 +169,7 @@ BarWidget {
                   width: Style.space(48)
                   height: Style.space(24)
                   iconText: "\uf067"
-                  text: "Tambah"
+                  text: "Add"
                   foreground: root.bar.foreground
                   verticalPadding: 0
                   horizontalPadding: 0
@@ -246,7 +246,7 @@ BarWidget {
                 id: urlField
                 width: parent.width - addButton.width - parent.spacing
                 anchors.verticalCenter: parent.verticalCenter
-                placeholderText: "Tempel URL direct\u2026"
+                placeholderText: "Paste direct URL\u2026"
                 maximumLength: 2048
                 onAccepted: root.addCurrent()
               }
@@ -254,7 +254,7 @@ BarWidget {
               Button {
                 id: addButton
                 iconText: "\uf067"
-                text: "Tambah"
+                text: "Add"
                 foreground: root.bar.foreground
                 bordered: true
                 implicitWidth: Style.space(88)
@@ -305,7 +305,7 @@ BarWidget {
               width: parent.width
               textFormat: Text.PlainText
               visible: svc ? svc.aria2Missing : false
-              text: "aria2 belum terpasang \u2014 jalankan: omarchy pkg add aria2"
+              text: "aria2 is not installed \u2014 run: omarchy pkg add aria2"
               color: Qt.darker(root.bar.foreground, 1.5)
               font.family: root.bar.fontFamily
               font.pixelSize: Style.font.caption
@@ -336,7 +336,7 @@ BarWidget {
               Text {
                 width: parent.width
                 textFormat: Text.PlainText
-                text: "SLOT: " + root.uiSlots
+                text: "SLOTS: " + root.uiSlots
                 color: Qt.darker(root.bar.foreground, 1.4)
                 font.family: root.bar.fontFamily
                 font.pixelSize: Style.font.caption
@@ -369,7 +369,7 @@ BarWidget {
               Text {
                 width: parent.width
                 textFormat: Text.PlainText
-                text: "SEGMEN: " + root.uiSegments
+                text: "SEGMENTS: " + root.uiSegments
                 color: Qt.darker(root.bar.foreground, 1.4)
                 font.family: root.bar.fontFamily
                 font.pixelSize: Style.font.caption
@@ -402,7 +402,7 @@ BarWidget {
               Text {
                 width: parent.width
                 textFormat: Text.PlainText
-                text: "BATAS KECEPATAN"
+                text: "SPEED LIMIT"
                 color: Qt.darker(root.bar.foreground, 1.4)
                 font.family: root.bar.fontFamily
                 font.pixelSize: Style.font.caption
@@ -414,7 +414,7 @@ BarWidget {
                 width: parent.width
                 textFormat: Text.PlainText
                 text: root.speedLimits[root.uiSpeedIdx] <= 0
-                  ? "Tanpa batas"
+                  ? "Unlimited"
                   : Model.formatSpeed(root.speedLimits[root.uiSpeedIdx])
                 color: Qt.darker(root.bar.foreground, 1.5)
                 font.family: root.bar.fontFamily
@@ -454,7 +454,7 @@ BarWidget {
             anchors.leftMargin: Style.space(10)
             anchors.verticalCenter: parent.verticalCenter
             textFormat: Text.PlainText
-            text: "AKTIVITAS (" + (svc ? svc.downloads.length : 0) + ")"
+            text: "ACTIVITY (" + (svc ? svc.downloads.length : 0) + ")"
             color: Qt.darker(root.bar.foreground, 1.3)
             font.family: root.bar.fontFamily
             font.pixelSize: Style.font.caption
@@ -676,7 +676,7 @@ BarWidget {
                 Text {
                   anchors.centerIn: parent
                   textFormat: Text.PlainText
-                  text: "Belum ada download \u2014 tempel URL di atas untuk mulai."
+                  text: "No downloads yet \u2014 paste a URL above to start."
                   color: Qt.darker(root.bar.foreground, 1.5)
                   font.family: root.bar.fontFamily
                   font.pixelSize: Style.font.caption
@@ -710,7 +710,7 @@ BarWidget {
             anchors.rightMargin: Style.space(10)
             anchors.verticalCenter: parent.verticalCenter
             iconText: "\uf2ed"
-            text: "Bersihkan"
+            text: "Clear"
             foreground: svc && (svc.completedCount + svc.errorCount + svc.cancelledCount > 0)
               ? root.bar.foreground
               : Qt.darker(root.bar.foreground, 1.7)
