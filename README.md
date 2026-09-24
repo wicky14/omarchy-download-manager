@@ -24,7 +24,7 @@ a button in the top bar, from the CLI, or via clipboard URL detection.
 Install this repository like any other Omarchy plugin:
 
 ```
-omarchy plugin add <git-url-repo> --enable
+omarchy plugin add https://github.com/wicky14/omarchy-download-manager.git --enable
 ```
 
 An interactive prompt is used for confirmation; `--enable` activates it
@@ -101,10 +101,11 @@ uninstall.sh        Full interactive uninstall.
 
 - `aria2c` runs with `--continue=true` and a `.aria2` control file in the
   destination folder; pausing the shell does not cancel progress.
-- The wrapper is detached (setsid) so it survives shell/PC restarts. On boot
-  the service reconciles: `paused`/`active` entries without a live wrapper are
-  marked `error` with "retry to continue" — click **retry** (or `retry <id>`)
-  to resume from where it stopped.
+- The wrapper is detached (`setsid`) so it survives an `omarchy restart shell`.
+  After a shell or PC restart, boot reconciliation marks `paused`/`active`
+  entries that lost their wrapper as `error` with "retry to continue" — click
+  **retry** (or `retry <id>`) and aria2 resumes from the saved `.aria2` control
+  file at the exact byte offset.
 
 ## Storage
 
@@ -145,9 +146,13 @@ Install from a folder for quick testing:
 omarchy plugin add file:///path/to/repo --enable --yes
 ```
 
-Remove the plugin from `~/.config/omarchy/plugins`, then
-`omarchy restart shell` — the bar entry is cleaned up too (checked via
-`PluginRegistry.setEnabled(false)`).
+Remove the plugin (folder + bar entry), then restart the shell to clear any
+loaded state:
+
+```
+omarchy plugin remove omakid.download-manager
+omarchy restart shell
+```
 
 ## License
 
