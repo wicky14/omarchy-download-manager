@@ -13,8 +13,8 @@ BarWidget {
   readonly property var speedLimits: [0, 131072, 262144, 524288, 1048576, 2097152, 5242880, 10485760]
 
   property bool popupOpen: false
-  property string pickDir: svc && svc.settings ? svc.settings.defaultDir : "~/Downloads"
   property string addMsg: ""
+  property string installMsg: ""
   property int rowHeight: Style.space(58)
 
   property int uiSlots: svc && svc.settings ? svc.settings.maxConcurrent : 3
@@ -59,7 +59,7 @@ BarWidget {
       root.addMsg = "Invalid URL."
       return
     }
-    var ok = svc ? svc.addUrl(u, root.pickDir) : false
+    var ok = svc ? svc.addUrl(u) : false
     if (ok) {
       urlField.text = ""
       root.addMsg = "Added to the queue."
@@ -69,17 +69,9 @@ BarWidget {
     }
   }
 
-  function chooseDir() {
-    pickProc.command = ["bash", root.folderHelper]
-    pickProc.running = true
-  }
-
   function toggleAll() {
     if (svc) svc.toggleAll()
   }
-
-  readonly property string folderHelper: decodeURIComponent(
-    Qt.resolvedUrl("folderpick.sh").toString().replace(/^file:\/\//, ""))
 
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
@@ -264,32 +256,6 @@ BarWidget {
               }
             }
 
-            Row {
-              width: parent.width
-              spacing: Style.space(8)
-
-              Button {
-                width: Style.space(34)
-                height: Style.space(26)
-                iconText: "\uf07c"
-                foreground: root.bar.foreground
-                verticalPadding: 0
-                horizontalPadding: 0
-                onClicked: root.chooseDir()
-              }
-
-              Text {
-                width: parent.width - Style.space(42)
-                textFormat: Text.PlainText
-                text: root.pickDir
-                color: Qt.darker(root.bar.foreground, 1.4)
-                font.family: root.bar.fontFamily
-                font.pixelSize: Style.font.caption
-                elide: Text.ElideMiddle
-                anchors.verticalCenter: parent.verticalCenter
-              }
-            }
-
             Text {
               width: parent.width
               textFormat: Text.PlainText
@@ -301,15 +267,40 @@ BarWidget {
               wrapMode: Text.Wrap
             }
 
-            Text {
+            Row {
               width: parent.width
-              textFormat: Text.PlainText
+              spacing: Style.space(8)
               visible: svc ? svc.aria2Missing : false
-              text: "aria2 is not installed \u2014 run: omarchy pkg add aria2"
-              color: Qt.darker(root.bar.foreground, 1.5)
-              font.family: root.bar.fontFamily
-              font.pixelSize: Style.font.caption
-              wrapMode: Text.Wrap
+
+              Text {
+                width: parent.width - installAria2Btn.width - parent.spacing
+                textFormat: Text.PlainText
+                anchors.verticalCenter: parent.verticalCenter
+                text: installProc.running
+                  ? "Installing aria2\u2026"
+                  : (root.installMsg !== "" ? root.installMsg : "aria2 is not installed")
+                color: Qt.darker(root.bar.foreground, 1.5)
+                font.family: root.bar.fontFamily
+                font.pixelSize: Style.font.caption
+                elide: Text.ElideRight
+              }
+
+              Button {
+                id: installAria2Btn
+                iconText: "\uf019"
+                text: "Install"
+                foreground: installProc.running
+                  ? Qt.darker(root.bar.foreground, 1.7)
+                  : root.bar.foreground
+                bordered: true
+                enabled: !installProc.running
+                horizontalPadding: Style.spacing.controlPaddingX
+                verticalPadding: Style.spacing.controlPaddingY
+                onClicked: {
+                  root.installMsg = ""
+                  installProc.running = true
+                }
+              }
             }
           }
         }
@@ -336,11 +327,21 @@ BarWidget {
               Text {
                 width: parent.width
                 textFormat: Text.PlainText
-                text: "SLOTS: " + root.uiSlots
+                text: "SLOTS"
                 color: Qt.darker(root.bar.foreground, 1.4)
                 font.family: root.bar.fontFamily
                 font.pixelSize: Style.font.caption
                 font.bold: true
+                horizontalAlignment: Text.AlignHCenter
+              }
+
+              Text {
+                width: parent.width
+                textFormat: Text.PlainText
+                text: String(root.uiSlots)
+                color: Qt.darker(root.bar.foreground, 1.5)
+                font.family: root.bar.fontFamily
+                font.pixelSize: Style.font.caption
                 horizontalAlignment: Text.AlignHCenter
               }
 
@@ -369,11 +370,21 @@ BarWidget {
               Text {
                 width: parent.width
                 textFormat: Text.PlainText
-                text: "SEGMENTS: " + root.uiSegments
+                text: "SEGMENTS"
                 color: Qt.darker(root.bar.foreground, 1.4)
                 font.family: root.bar.fontFamily
                 font.pixelSize: Style.font.caption
                 font.bold: true
+                horizontalAlignment: Text.AlignHCenter
+              }
+
+              Text {
+                width: parent.width
+                textFormat: Text.PlainText
+                text: String(root.uiSegments)
+                color: Qt.darker(root.bar.foreground, 1.5)
+                font.family: root.bar.fontFamily
+                font.pixelSize: Style.font.caption
                 horizontalAlignment: Text.AlignHCenter
               }
 
@@ -504,6 +515,13 @@ BarWidget {
                   QtObject {
                     id: rowCtx
                     property var st: svc ? (svc.statuses[modelData.id] || null) : null
+                  }
+
+                  MouseArea {
+                    id: rowHover
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: { if (modelData.state === "completed" && svc) svc.open(modelData.id) }
                   }
 
                   Row {
@@ -658,13 +676,6 @@ BarWidget {
                       }
                     }
                   }
-
-                  MouseArea {
-                    id: rowHover
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onClicked: { if (modelData.state === "completed" && svc) svc.open(modelData.id) }
-                  }
                 }
               }
 
@@ -704,22 +715,6 @@ BarWidget {
             font.pixelSize: Style.font.caption
             elide: Text.ElideRight
           }
-
-          Button {
-            anchors.right: parent.right
-            anchors.rightMargin: Style.space(10)
-            anchors.verticalCenter: parent.verticalCenter
-            iconText: "\uf2ed"
-            text: "Clear"
-            foreground: svc && (svc.completedCount + svc.errorCount + svc.cancelledCount > 0)
-              ? root.bar.foreground
-              : Qt.darker(root.bar.foreground, 1.7)
-            bordered: true
-            horizontalPadding: Style.spacing.controlPaddingX
-            verticalPadding: Style.spacing.controlPaddingY
-            enabled: svc && (svc.completedCount + svc.errorCount + svc.cancelledCount > 0)
-            onClicked: { if (svc) svc.clearFinished() }
-          }
         }
       }
     }
@@ -733,17 +728,16 @@ BarWidget {
   }
 
   Process {
-    id: pickProc
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        var d = String(text || "").trim()
-        if (d) root.pickDir = d
-      }
+    id: installProc
+    command: [
+      "pkexec", "env",
+      "PATH=/usr/share/omarchy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin",
+      "omarchy", "pkg", "add", "aria2"
+    ]
+    onExited: function(code) {
+      if (code !== 0) root.installMsg = "Install failed \u2014 run: omarchy pkg add aria2"
+      else root.installMsg = ""
+      if (svc) svc.checkAria()
     }
-  }
-
-  Component.onCompleted: {
-    if (svc && svc.settings) root.pickDir = svc.settings.defaultDir
   }
 }

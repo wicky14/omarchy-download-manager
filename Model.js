@@ -116,9 +116,12 @@ function describe(entry, status) {
   var total = status ? Number(status.total) : 0
   if (state === "active") {
     var speed = status && status.speed ? formatSpeed(status.speed) : ""
-    var eta = status && status.eta > 0 ? " · " + formatEta(status.eta) : ""
-    if (p >= 0) return formatBytes(done) + " / " + formatBytes(total) + speed + eta
-    return formatBytes(done) + speed + eta
+    var parts = []
+    if (p >= 0) parts.push(formatBytes(done) + " / " + formatBytes(total))
+    else parts.push(formatBytes(done))
+    if (speed) parts.push(speed)
+    if (status && status.eta > 0) parts.push(formatEta(status.eta))
+    return parts.join(" \u00b7 ")
   }
   if (state === "paused") {
     if (p >= 0) return "paused \u00b7 " + formatBytes(done) + " / " + formatBytes(total)

@@ -33,6 +33,8 @@ Item {
   property bool _ariaNotified: false
   property bool _persistPending: false
   property var _spawnQueue: []
+  property var _sizePrev: ({})
+  property var _lastTotal: ({})
 
   // ---------- aggregates ----------
   readonly property int activeCount: _count("active")
@@ -419,6 +421,7 @@ Item {
     var blockLines = text.split("\n")
     var status = {}
     var alive = {}
+    var bytes = {}
     var now = Date.now()
     for (var i = 0; i < blockLines.length; i++) {
       var line = blockLines[i]
@@ -437,6 +440,45 @@ Item {
       if (line.indexOf("W ") === 0) {
         var wp = line.split(" ")
         if (wp.length >= 3) alive[wp[1]] = (wp[2] === "1")
+        continue
+      }
+      if (line.indexOf("B ") === 0) {
+        var bp = line.slice(2).split(" ")
+        if (bp.length >= 2 && !isNaN(Number(bp[1]))) bytes[bp[0]] = Number(bp[1])
+      }
+    }
+
+    // overlay live byte-derived progress for active downloads so speed, size,
+    // percent and ETA refresh between aria2's 1s summary writes
+    var fast = {}
+    for (var bid in bytes) {
+      var e = root.entryById(bid)
+      if (!e || e.state !== "active") continue
+      var b = Number(bytes[bid])
+      var base = status[bid] || {}
+      if (base.state && base.state !== "active") continue
+      var prev = root._sizePrev[bid]
+      var total = root._lastTotal[bid]
+      if (!total || total <= 0) total = base.total || e.totalBytes || 0
+      var inst = 0
+      var dt = prev ? now - prev.ts : 0
+      if (prev && dt >= 200 && b >= prev.bytes) {
+        inst = (b - prev.bytes) / (dt / 1000)
+      }
+      var blended = inst
+      if (prev && prev.speed > 0) {
+        if (inst > 0) blended = prev.speed * 0.5 + inst * 0.5
+        else blended = prev.speed * 0.6
+      }
+      root._sizePrev[bid] = { bytes: b, ts: now, speed: blended }
+      if (total > 0) root._lastTotal[bid] = total
+      var pct = total > 0 ? Math.max(0, Math.min(100, Math.floor(b / total * 100))) : -1
+      var eta = (blended > 0 && total > b) ? Math.round((total - b) / blended) : -1
+      fast[bid] = {
+        id: bid, state: "active",
+        completed: b, total: total, percent: pct,
+        speed: Math.round(blended), eta: eta, error: base.error || "",
+        ts: Math.round(now / 1000), dir: base.dir, file: base.file
       }
     }
 
@@ -446,7 +488,18 @@ Item {
       if (status[sid]) merged[sid] = status[sid]
     }
     for (var sid2 in status) merged[sid2] = status[sid2]
+    for (var fid in fast) merged[fid] = fast[fid]
     root.statuses = merged
+
+    // drop bookkeeping for entries that are gone or no longer active
+    for (var kp in root._sizePrev) {
+      var ee = root.entryById(kp)
+      if (!ee || ee.state !== "active") delete root._sizePrev[kp]
+    }
+    for (var kt in root._lastTotal) {
+      var ee2 = root.entryById(kt)
+      if (!ee2 || ee2.state !== "active") delete root._lastTotal[kt]
+    }
 
     // apply transitions + propagate total bytes
     var changed = false
@@ -541,6 +594,11 @@ Item {
     '    printf "S %s " "$id"\n' +
     '    tr -d "\\n" < "$f"\n' +
     '    printf "\\n"\n' +
+    '    dir=$(sed -n \'s/.*"dir":"\\([^"]*\\)".*/\\1/p\' "$f" | head -n1)\n' +
+    '    name=$(sed -n \'s/.*"file":"\\([^"]*\\)".*/\\1/p\' "$f" | head -n1)\n' +
+    '    if [ -n "$dir" ] && [ -n "$name" ] && [ -f "$dir/$name" ]; then\n' +
+    '      printf "B %s %s\\n" "$id" "$(stat -c %s "$dir/$name" 2>/dev/null)"\n' +
+    '    fi\n' +
     '  done\n' +
     '  for f in "$rt"/*.wrapper.pid; do\n' +
     '    [ -f "$f" ] || continue\n' +
@@ -675,7 +733,7 @@ Item {
   // ---------- timers ----------
   Timer {
     id: statusTimer
-    interval: 2000
+    interval: 500
     running: root.ready
     repeat: true
     triggeredOnStart: true
