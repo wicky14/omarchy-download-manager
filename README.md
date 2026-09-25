@@ -16,6 +16,22 @@ a button in the top bar or from the CLI.
   omarchy pkg add aria2
   ```
 
+  If it is missing, the panel shows an *aria2 is not installed* banner with an
+  **Install** button. That button runs `omarchy pkg add aria2` through `pkexec`,
+  so your desktop asks for your password once (polkit). Installing aria2 is the
+  only thing in this plugin that needs elevated privileges — everything else
+  runs as your normal user.
+
+- `gawk` and `python3` (required, already on Omarchy). `gawk` parses aria2's
+  progress lines and `python3` backs the `omarchy-dl` CLI. Both ship with the
+  base system — `gawk` is a hard dependency of `pacman` — so there is normally
+  nothing to install. If a download sits in *active* with no progress bar and no
+  speed, check them with `command -v gawk python3`. The transfer itself keeps
+  running in that case: only the progress readout depends on `gawk`.
+
+- `libnotify` (optional). Desktop notifications on download complete/failure;
+  skipped silently when `notify-send` is missing.
+
 ## Installation
 
 Install this repository like any other Omarchy plugin:
