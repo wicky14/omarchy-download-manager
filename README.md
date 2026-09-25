@@ -1,10 +1,10 @@
 # Download Manager (omarchy)
 
 An IDM-style download manager for the Omarchy bar: download files directly from
-a button in the top bar, from the CLI, or via clipboard URL detection.
+a button in the top bar or from the CLI.
 
 - **Engine**: aria2 (multi-connection, resume, pause)
-- **Control**: bar widget panel, `omarchy-dl` CLI, clipboard watcher
+- **Control**: bar widget panel and the `omarchy-dl` CLI
 - **Queue**: parallel slots, pause/resume, retry, speed limits
 - **Persistent**: queue is stored on disk and survives shell/PC restarts
 
@@ -15,9 +15,6 @@ a button in the top bar, from the CLI, or via clipboard URL detection.
   ```
   omarchy pkg add aria2
   ```
-
-- `wl-paste` from the `wl-clipboard` package (for clipboard URL detection).
-- `gdbus` from the `glib2` package (for the portal folder picker).
 
 ## Installation
 
@@ -39,21 +36,20 @@ panel, right-click pauses/resumes all.
 ### Panel (bar widget)
 
 1. Paste a direct URL (http/https) into the field at the top, click **Add**.
-2. Choose the destination folder with the folder button (system portal); the
-   default is taken from the `defaultDir` setting (`~/Downloads`).
+2. The destination folder is the `defaultDir` setting (`~/Downloads`); there is
+   no folder picker in the panel — override the destination per download with
+   the CLI `--dir` option.
 3. Adjust **Slots** (number of parallel downloads), **Segments** (connections
    per file), and **Speed Limit** with the sliders below the form.
-4. If a URL is copied while the clipboard watcher is active, a "URL FROM
-   CLIPBOARD" block appears with **Add** / close buttons.
-5. Each row shows the file name, progress bar, percentage, meta
+4. Each row shows the file name, progress bar, percentage, meta
    (speed/ETA), and status-dependent action buttons:
    - *active*: pause / cancel
    - *paused*: resume / cancel
    - *queued*: cancel
    - *done*: open folder / remove
    - *failed / canceled*: retry / remove
-6. The footer shows a summary and a **Clear** button to remove all entries in
-   a final state.
+5. The footer shows a summary of final-state entries; clear them per row with
+   the ✕ remove button or all at once with `omarchy-dl clear`.
 
 ### CLI (`omarchy-dl`)
 
@@ -74,14 +70,12 @@ omarchy-dl clear                                       # clear final-state entri
 
 ```
 BarWidget.qml       Button + panel (KeyboardPanel). UI only; state comes from the service.
-DownloadService.qml Owns the queue + settings, slot scheduler, CLI/clipboard watchers.
+DownloadService.qml Owns the queue + settings, slot scheduler, CLI watcher.
 dm-dl.sh            Per-download wrapper: spawns detached aria2c (setsid), parses
                     summaries via dm-status.awk, writes status.json atomically, sends
                     notifications via notify-send. pause/resume = SIGSTOP/SIGCONT.
 dm-status.awk       gawk parser for aria2c summary lines
                     ([#gid done/tot(pct%) CN:n DL:speed ETA:...]).
-clipwatch.sh        wl-paste --watch -> clipboard.jsonl (in the runtime dir).
-folderpick.sh       Folder picker via xdg-desktop-portal (gdbus).
 dm-cli.sh           CLI front-end; only writes requests to cli.jsonl.
 uninstall.sh        Full interactive uninstall.
 ```
@@ -91,8 +85,7 @@ uninstall.sh        Full interactive uninstall.
 - The CLI does **not** write the queue file; it appends one JSON (op) line to
   `$XDG_RUNTIME_DIR/omarchy-download-manager/cli.jsonl`.
 - The service tails that file every 2 seconds, executes the ops, and is the
-  sole writer of `queue.json`. The clipboard watcher writes `clipboard.jsonl`;
-  the service only shows an "Add?" prompt in the panel.
+  sole writer of `queue.json`.
 - Progress summaries are written by `dm-dl.sh` to
   `$XDG_RUNTIME_DIR/omarchy-download-manager/<id>.status.json` (tmp+mv atomic);
   the service reads them whole per poll.
@@ -114,7 +107,7 @@ uninstall.sh        Full interactive uninstall.
 | Queue & settings | `~/.config/omarchy/omakid.download-manager/queue.json` |
 | Per-download status | `$XDG_RUNTIME_DIR/omarchy-download-manager/*.status.json` |
 | Wrapper / aria2 pids | `$XDG_RUNTIME_DIR/omarchy-download-manager/*.pid` |
-| CLI requests | `.../cli.jsonl` · clipboard `.../clipboard.jsonl` |
+| CLI requests | `.../cli.jsonl` |
 | CLI symlink | `~/.local/bin/omarchy-dl` |
 
 ## Uninstall

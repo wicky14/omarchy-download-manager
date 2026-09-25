@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "author": "omakid",
   "license": "MIT",
-  "description": "IDM-style download manager for the Omarchy bar: aria2 engine, parallel slots, pause/resume, clipboard detection, and an 'omarchy-dl' CLI.",
+  "description": "IDM-style download manager for the Omarchy bar: aria2 engine, parallel slots, pause/resume, and an 'omarchy-dl' CLI.",
   "kinds": [
     "bar-widget",
     "service"
