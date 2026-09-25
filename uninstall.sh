@@ -5,7 +5,7 @@
 # removes the plugin folder + bar entry). This script additionally cleans up
 # everything the plugin created at runtime:
 #
-#   - kills running aria2 downloads and the clipboard watcher
+#   - kills running aria2 downloads
 #   - removes the runtime dir  ($XDG_RUNTIME_DIR/omarchy-download-manager)
 #   - removes the config dir    (~/.config/omarchy/omakid.download-manager)
 #   - removes the CLI symlink   (~/.local/bin/omarchy-dl)
@@ -52,9 +52,8 @@ main() {
   }
 
   # 1. stop everything running
-  info "Stopping active downloads & clipboard watcher..."
+  info "Stopping active downloads..."
   bash "$SCRIPT_DIR/dm-dl.sh" cancel-all 2>/dev/null || true
-  bash "$SCRIPT_DIR/clipwatch.sh" stop 2>/dev/null || true
   sleep 0.3
 
   # 2. remove runtime + config
@@ -76,7 +75,7 @@ main() {
   fi
 
   echo
-  ok "Done \u2014 Download Manager has been fully removed."
+  ok "Done — Download Manager has been fully removed."
   info "Restart the shell if needed: omarchy restart shell"
 }
 
