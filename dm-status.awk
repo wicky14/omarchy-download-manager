@@ -34,15 +34,16 @@ function etasec(s) {
 /^\[#/ {
   line = $0
   # [#gid done<unit>B/total<unit>B(pct%) CN:n DL:speed B ETA:x]
-  if (!match(line, /^\[#([0-9a-fA-F]+) ([0-9.]+)([a-zA-Z]*)?i?B\/([0-9.]+)([a-zA-Z]*)?i?B\(([0-9?]+)%\) CN:[0-9]+ DL:([0-9.]+)([a-zA-Z]*)[^ ]* ETA:([^\]]+)\]/, cap)) next
+  if (!match(line, /^\[#([0-9a-fA-F]+) ([0-9.]+)([a-zA-Z]*)?i?B\/([0-9.]+)([a-zA-Z]*)?i?B\(([0-9?]+)%\) CN:([0-9]+) DL:([0-9.]+)([a-zA-Z]*)[^ ]* ETA:([^\]]+)\]/, cap)) next
 
   done = tobytes(cap[2] + 0, cap[3])
   total = tobytes(cap[4] + 0, cap[5])
   pct = (cap[6] == "?" || cap[6] == "") ? -1 : cap[6] + 0
-  spd = tobytes(cap[7] + 0, cap[8])
-  eta = etasec(cap[9])
+  conn = cap[7] + 0
+  spd = tobytes(cap[8] + 0, cap[9])
+  eta = etasec(cap[10])
 
-  json = sprintf("{\"id\":\"%s\",\"state\":\"active\",\"completed\":%d,\"total\":%d,\"percent\":%d,\"speed\":%d,\"eta\":%d,\"dir\":\"%s\",\"file\":\"%s\",\"ts\":%d}", jesc(id), done, total, pct, spd, eta, jesc(dir), jesc(file), systime())
+  json = sprintf("{\"id\":\"%s\",\"state\":\"active\",\"completed\":%d,\"total\":%d,\"percent\":%d,\"speed\":%d,\"eta\":%d,\"conn\":%d,\"dir\":\"%s\",\"file\":\"%s\",\"ts\":%d}", jesc(id), done, total, pct, spd, eta, conn, jesc(dir), jesc(file), systime())
 
   outtmp = out ".tmp"
   printf "%s\n", json > outtmp

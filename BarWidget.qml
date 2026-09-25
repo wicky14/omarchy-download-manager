@@ -65,7 +65,7 @@ BarWidget {
       root.addMsg = "Added to the queue."
       addMsgTimer.restart()
     } else {
-      root.addMsg = "This URL is already in the list."
+      root.addMsg = "Already being downloaded."
     }
   }
 
@@ -596,6 +596,24 @@ BarWidget {
                             }
                             if (p >= 100) return parent.width
                             return Math.max(Style.space(6), parent.width * p / 100)
+                          }
+                        }
+
+                        Repeater {
+                          model: (rowCtx.st && rowCtx.st.total > 0 && modelData.segments > 1)
+                            ? Math.max(0, modelData.segments - 1)
+                            : 0
+
+                          Rectangle {
+                            required property int index
+                            x: (parent.width / modelData.segments) * (index + 1) - 1
+                            width: 1
+                            height: parent.height
+                            color: Qt.rgba(
+                              1 - root.bar.foreground.r,
+                              1 - root.bar.foreground.g,
+                              1 - root.bar.foreground.b,
+                              0.25)
                           }
                         }
                       }

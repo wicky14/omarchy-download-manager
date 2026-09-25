@@ -17,6 +17,7 @@
 #   dm-dl.sh resume <id>
 #   dm-dl.sh cancel <id>
 #   dm-dl.sh cancel-all
+#   dm-dl.sh remove <id> <dir> <filename>   (terminates and deletes the file + history)
 #   dm-dl.sh is-running <id>
 
 set -u
@@ -108,24 +109,37 @@ cmd_run() {
     --timeout=120
   )
 
+  # If the target already exists on disk without a resume control file, never
+  # overwrite it: report a collision so the panel can renumber and re-queue.
+  # A partial download (control file present) resumes as usual.
+  local collided=0
+  if [[ -f "$dir/$file" && ! -e "$dir/$file.aria2" ]]; then
+    collided=1
+  fi
+
   local fifo="$RUNTIME/$id.out"
-  rm -f "$fifo"
-  mkfifo "$fifo"
+  local apid="" parser_pid="" rc=0
+  if (( collided == 0 )); then
+    rm -f "$fifo"
+    mkfifo "$fifo"
 
-  aria2c "${opts[@]}" "$url" > "$fifo" 2>&1 &
-  local apid=$!
-  echo "$apid" > "$RUNTIME/$id.aria2.pid"
+    aria2c "${opts[@]}" "$url" > "$fifo" 2>&1 &
+    apid=$!
+    echo "$apid" > "$RUNTIME/$id.aria2.pid"
 
-  gawk -v id="$id" -v out="$RUNTIME/$id.status.json" -v dir="$dir" -v file="$file" \
-    -f "$PARSER" < "$fifo" &
-  local parser_pid=$!
+    gawk -v id="$id" -v out="$RUNTIME/$id.status.json" -v dir="$dir" -v file="$file" \
+      -f "$PARSER" < "$fifo" &
+    parser_pid=$!
 
-  wait "$apid"
-  local rc=$?
+    wait "$apid"
+    rc=$?
 
-  kill "$parser_pid" 2>/dev/null
-  wait "$parser_pid" 2>/dev/null
-  rm -f "$fifo"
+    kill "$parser_pid" 2>/dev/null
+    wait "$parser_pid" 2>/dev/null
+    rm -f "$fifo"
+  else
+    rc=3
+  fi
 
   local state="error"
   local msg=""
@@ -133,6 +147,10 @@ cmd_run() {
     0) state="completed" ;;
     *) state="error"; msg=$(aria2_rc_msg "$rc") ;;
   esac
+  if (( collided == 1 )); then
+    state="error"
+    msg="file already exists"
+  fi
   if [[ -f "$RUNTIME/$id.cancelled" ]]; then
     state="cancelled"
     msg=""
@@ -203,6 +221,20 @@ cmd_is_running() {
   exit 1
 }
 
+cmd_remove() {
+  [[ $# -ge 3 ]] || die "remove requires <id> <dir> <file>"
+  local id="$1" dir="$2" file="$3"
+  local ap wp
+  ap=$(cat "$RUNTIME/$id.aria2.pid" 2>/dev/null || true)
+  wp=$(cat "$RUNTIME/$id.wrapper.pid" 2>/dev/null || true)
+  [[ -n "$ap" ]] && kill "$ap" 2>/dev/null || true
+  [[ -n "$wp" ]] && kill "$wp" 2>/dev/null || true
+  [[ -n "$dir" && "$dir" != "/" && -n "$file" && "$file" != */* ]] || return 1
+  rm -f -- "$dir/$file" "$dir/$file.aria2"
+  rm -f "$RUNTIME/$id.status.json" "$RUNTIME/$id.cancelled" \
+        "$RUNTIME/$id.wrapper.pid" "$RUNTIME/$id.aria2.pid" "$RUNTIME/$id.out" 2>/dev/null || true
+}
+
 case "${1:-}" in
   start) shift; cmd_start "$@" ;;
   run) shift; cmd_run "$@" ;;
@@ -210,6 +242,7 @@ case "${1:-}" in
   resume) shift; cmd_resume "$@" ;;
   cancel) shift; cmd_cancel "$@" ;;
   cancel-all) cmd_cancel_all ;;
+  remove) shift; cmd_remove "$@" ;;
   is-running) shift; cmd_is_running "$@" ;;
   *) die "usage: $0 {start|run|pause|resume|cancel|cancel-all|is-running}" ;;
 esac

@@ -98,7 +98,7 @@ Item {
   function addUrl(url, dir, segments, speed) {
     var u = String(url || "").trim()
     if (!Model.isValidUrl(u)) return false
-    if (Model.hasUrl(root.downloads, u)) return false
+    if (Model.hasActiveUrl(root.downloads, u)) return false
 
     var d = Model.normalizeDir(dir || root.settings.defaultDir, root.home)
     var seg = Number(segments || 0) > 0 ? Model.clamp(segments, 1, 16) : Model.clamp(root.settings.segments, 1, 16)
@@ -139,7 +139,7 @@ Item {
   function _filenameTaken(dir, filename) {
     for (var i = 0; i < root.downloads.length; i++) {
       var e = root.downloads[i]
-      if (e.dir === dir && e.filename === filename && !Model.isFinal(e.state)) return true
+      if (e.dir === dir && e.filename === filename) return true
     }
     return false
   }
@@ -209,6 +209,38 @@ Item {
     root.persist()
   }
 
+  function _renumberAndRequeue(id) {
+    var e = root.entryById(id)
+    if (!e) return
+    var old = e.filename || Model.deriveFilename(e.url || "")
+    var dot = old.lastIndexOf(".")
+    var base = (dot > 0) ? old.slice(0, dot) : old
+    var ext = (dot > 0) ? old.slice(dot) : ""
+    var cand = old
+    var i = 1
+    while (i <= 100 && (cand === old || root._filenameTaken(e.dir, cand))) {
+      i++
+      cand = base + " (" + i + ")" + ext
+    }
+    if (cand === old || root._filenameTaken(e.dir, cand)) cand = base + "." + Date.now() + ext
+    var next = []
+    for (var k = 0; k < root.downloads.length; k++) {
+      var d = root.downloads[k]
+      if (d.id === id) {
+        var copy = JSON.parse(JSON.stringify(d))
+        copy.filename = cand
+        copy.error = ""
+        copy.state = "queued"
+        next.push(copy)
+      } else {
+        next.push(d)
+      }
+    }
+    root.downloads = next
+    root.persist()
+    root.sweep()
+  }
+
   function pause(id) {
     var e = root.entryById(id)
     if (!e || e.state !== "active") return
@@ -260,13 +292,15 @@ Item {
   }
 
   function removeById(id) {
+    var e = root.entryById(id)
     var next = []
     for (var i = 0; i < root.downloads.length; i++) {
       if (root.downloads[i].id !== id) next.push(root.downloads[i])
     }
     root.downloads = next
     root.persist()
-    _runDm(["cancel", id])
+    if (e) _runDm(["remove", id, e.dir, e.filename])
+    else _runDm(["cancel", id])
   }
 
   function clearFinished() {
@@ -478,7 +512,7 @@ Item {
         id: bid, state: "active",
         completed: b, total: total, percent: pct,
         speed: Math.round(blended), eta: eta, error: base.error || "",
-        ts: Math.round(now / 1000), dir: base.dir, file: base.file
+        ts: Math.round(now / 1000), dir: base.dir, file: base.file, conn: base.conn || 0
       }
     }
 
@@ -515,7 +549,11 @@ Item {
         root._setState(e.id, "cancelled", false)
         changed = true
       } else if (st && st.state === "error") {
-        root._setError(e.id, st.error || "failed")
+        if (st.error && st.error.indexOf("file already exists") >= 0) {
+          root._renumberAndRequeue(e.id)
+        } else {
+          root._setError(e.id, st.error || "failed")
+        }
         changed = true
       } else if (st && st.state === "active" && !isAlive && now - (st.ts * 1000) > 20000) {
         root._setError(e.id, "stopped \u2014 retry to continue")

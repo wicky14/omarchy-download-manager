@@ -96,6 +96,13 @@ function hasUrl(downloads, candidate) {
   return false
 }
 
+function hasActiveUrl(downloads, candidate) {
+  for (var i = 0; i < downloads.length; i++) {
+    if (!isFinal(downloads[i].state) && sameUrl(downloads[i].url, candidate)) return true
+  }
+  return false
+}
+
 function popMatchDelay(list) {
   // Returns a small delay so dismissed clipboard urls stay gone for a while.
   return null
@@ -116,10 +123,12 @@ function describe(entry, status) {
   var total = status ? Number(status.total) : 0
   if (state === "active") {
     var speed = status && status.speed ? formatSpeed(status.speed) : ""
+    var conn = status && Number(status.conn) > 0 ? Number(status.conn) : 0
     var parts = []
     if (p >= 0) parts.push(formatBytes(done) + " / " + formatBytes(total))
     else parts.push(formatBytes(done))
     if (speed) parts.push(speed)
+    if (conn > 0) parts.push(conn + " conn")
     if (status && status.eta > 0) parts.push(formatEta(status.eta))
     return parts.join(" \u00b7 ")
   }
@@ -157,6 +166,7 @@ if (typeof module !== "undefined") {
     normalizeDir: normalizeDir,
     sameUrl: sameUrl,
     hasUrl: hasUrl,
+    hasActiveUrl: hasActiveUrl,
     isFinal: isFinal,
     describe: describe,
     statusIcon: statusIcon
