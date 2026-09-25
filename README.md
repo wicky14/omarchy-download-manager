@@ -50,6 +50,11 @@ panel, right-click pauses/resumes all.
    - *failed / canceled*: retry / remove
 5. The footer shows a summary of final-state entries; clear them per row with
    the ✕ remove button or all at once with `omarchy-dl clear`.
+6. The **MB/s** ⇄ **Mb/s** button in the footer right switches every displayed
+   speed between bytes (`11,0 MB/s`, base 1024) and bits (`92,3 Mb/s`, base
+   1000 — the unit ISPs advertise). It affects display only; the limit itself
+   is always stored in bytes per second, and the choice persists in
+   `queue.json`.
 
 ### CLI (`omarchy-dl`)
 
@@ -65,6 +70,9 @@ omarchy-dl pause <id> | resume <id> | cancel <id> | retry <id>
 omarchy-dl open <id>                                   # open folder of a finished file
 omarchy-dl clear                                       # clear final-state entries
 ```
+
+`--speed` is always in **KB/s** (`--speed 500` = 500 KB/s = 4 Mb/s), independent
+of the unit shown in the panel.
 
 ## Architecture
 

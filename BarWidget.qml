@@ -20,15 +20,20 @@ BarWidget {
   property int uiSlots: svc && svc.settings ? svc.settings.maxConcurrent : 3
   property int uiSegments: svc && svc.settings ? svc.settings.segments : 8
   property int uiSpeedIdx: root.speedIndexFor(svc && svc.settings ? svc.settings.speedLimit : 0)
+  readonly property string speedUnit: (svc && svc.settings && svc.settings.speedUnit === "bits") ? "bits" : "bytes"
 
   function close() { popupOpen = false }
+
+  function toggleSpeedUnit() {
+    if (svc) svc.setSpeedUnit(root.speedUnit === "bits" ? "bytes" : "bits")
+  }
 
   function summaryText() {
     if (!svc || !svc.ready) return "loading\u2026"
     if (svc.activeCount > 0) {
       var s = svc.activeCount + " active"
       if (svc.queuedCount > 0) s += " +" + svc.queuedCount
-      if (svc.totalSpeed > 0) s += " \u00b7 " + Model.formatSpeed(svc.totalSpeed)
+      if (svc.totalSpeed > 0) s += " \u00b7 " + Model.formatSpeed(svc.totalSpeed, root.speedUnit)
       return s
     }
     if (svc.pausedCount > 0) return svc.pausedCount + " paused"
@@ -45,12 +50,19 @@ BarWidget {
     return parts.join(" \u00b7 ")
   }
 
+  // Nearest preset, not exact: limits set via the CLI (--speed) or stored by an
+  // older version are not in speedLimits. Falls back to the closest preset
+  // instead of index 0, which would label a real limit as "Unlimited".
   function speedIndexFor(v) {
     var n = Number(v)
-    for (var i = 0; i < root.speedLimits.length; i++) {
-      if (root.speedLimits[i] === n) return i
+    if (!isFinite(n) || n <= 0) return 0
+    var best = 1
+    var bestDiff = Infinity
+    for (var i = 1; i < root.speedLimits.length; i++) {
+      var d = Math.abs(root.speedLimits[i] - n)
+      if (d < bestDiff) { bestDiff = d; best = i }
     }
-    return 0
+    return best
   }
 
   function addCurrent() {
@@ -426,7 +438,7 @@ BarWidget {
                 textFormat: Text.PlainText
                 text: root.speedLimits[root.uiSpeedIdx] <= 0
                   ? "Unlimited"
-                  : Model.formatSpeed(root.speedLimits[root.uiSpeedIdx])
+                  : Model.formatSpeed(root.speedLimits[root.uiSpeedIdx], root.speedUnit)
                 color: Qt.darker(root.bar.foreground, 1.5)
                 font.family: root.bar.fontFamily
                 font.pixelSize: Style.font.caption
@@ -623,7 +635,7 @@ BarWidget {
                       Text {
                         width: parent.width
                         textFormat: Text.PlainText
-                        text: Model.describe(modelData, rowCtx.st)
+                        text: Model.describe(modelData, rowCtx.st, root.speedUnit)
                         color: Qt.darker(root.bar.foreground, 1.4)
                         font.family: root.bar.fontFamily
                         font.pixelSize: Style.font.caption
@@ -727,6 +739,8 @@ BarWidget {
           Text {
             anchors.left: parent.left
             anchors.leftMargin: Style.space(10)
+            anchors.right: unitBtn.left
+            anchors.rightMargin: Style.space(10)
             anchors.verticalCenter: parent.verticalCenter
             textFormat: Text.PlainText
             text: root.footerText()
@@ -734,6 +748,19 @@ BarWidget {
             font.family: root.bar.fontFamily
             font.pixelSize: Style.font.caption
             elide: Text.ElideRight
+          }
+
+          Button {
+            id: unitBtn
+            anchors.right: parent.right
+            anchors.rightMargin: Style.space(10)
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.speedUnit === "bits" ? "Mb/s" : "MB/s"
+            foreground: Qt.darker(root.bar.foreground, 1.4)
+            bordered: true
+            horizontalPadding: Style.spacing.controlPaddingX
+            verticalPadding: Style.spacing.controlPaddingY
+            onClicked: root.toggleSpeedUnit()
           }
         }
       }

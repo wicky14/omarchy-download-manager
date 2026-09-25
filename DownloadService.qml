@@ -26,7 +26,7 @@ Item {
   // ---------- state ----------
   property var downloads: []
   property var statuses: ({})
-  property var settings: ({ defaultDir: "~/Downloads", maxConcurrent: 3, segments: 8, speedLimit: 0 })
+  property var settings: ({ defaultDir: "~/Downloads", maxConcurrent: 3, segments: 8, speedLimit: 0, speedUnit: "bytes" })
   property var pendingClipboard: []
   property bool ready: false
   property bool aria2Missing: true
@@ -372,6 +372,21 @@ Item {
     root.persist()
   }
 
+  // Display-only preference: "bytes" (MB/s) or "bits" (Mb/s).
+  function _normUnit(u) {
+    var s = String(u === undefined || u === null ? "" : u).toLowerCase()
+    if (s === "bits" || s === "bit" || s === "mb" || s === "mbit" || s === "mbit/s")
+      return "bits"
+    return "bytes"
+  }
+
+  function setSpeedUnit(u) {
+    var s = JSON.parse(JSON.stringify(root.settings))
+    s.speedUnit = _normUnit(u)
+    root.settings = s
+    root.persist()
+  }
+
   function setDefaultDir(d) {
     var s = JSON.parse(JSON.stringify(root.settings))
     s.defaultDir = Model.normalizeDir(d, root.home)
@@ -708,7 +723,13 @@ Item {
       onStreamFinished: {
         try {
           var q = JSON.parse(text || "{}")
-          if (q.settings && typeof q.settings === "object") root.settings = q.settings
+          if (q.settings && typeof q.settings === "object") {
+            // Clone before touching keys: q.settings replaces the whole object,
+            // so a fresh literal here would drop the other persisted settings.
+            var st = JSON.parse(JSON.stringify(q.settings))
+            st.speedUnit = _normUnit(st.speedUnit)
+            root.settings = st
+          }
           if (Array.isArray(q.downloads)) root.downloads = q.downloads
         } catch (e) {}
         root.ready = true

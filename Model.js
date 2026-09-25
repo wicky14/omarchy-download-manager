@@ -27,9 +27,28 @@ function formatBytes(bytes) {
   return fmt(v) + " " + units[i]
 }
 
-function formatSpeed(bps) {
-  var n = Number(bps)
+// Bits, base 1000 (ISP convention: 1 Mb = 1.000.000 bit).
+function formatSpeedBits(bytesPerSec) {
+  var n = Number(bytesPerSec)
   if (!isFinite(n) || n <= 0) return ""
+  var bits = n * 8
+  if (bits < 1000) return Math.round(bits) + " b/s"
+  var units = ["Kb", "Mb", "Gb", "Tb"]
+  var v = bits
+  var i = -1
+  do {
+    v = v / 1000
+    i++
+  } while (Math.round(v * 10) / 10 >= 1000 && i < units.length - 1)
+  return fmt(v) + " " + units[i] + "/s"
+}
+
+// unit: "bits" for Mb/s, anything else (default) for MB/s.
+function formatSpeed(bytesPerSec, unit) {
+  var n = Number(bytesPerSec)
+  if (!isFinite(n) || n <= 0) return ""
+  if (String(unit === undefined || unit === null ? "" : unit).toLowerCase() === "bits")
+    return formatSpeedBits(n)
   return formatBytes(n) + "/s"
 }
 
@@ -116,19 +135,19 @@ function isFinal(state) {
   return state === "completed" || state === "error" || state === "cancelled"
 }
 
-function describe(entry, status) {
+function describe(entry, status, unit) {
   var state = entryState(entry)
   var p = status ? percent(status.completed, status.total) : -1
   var done = status ? Number(status.completed) : 0
   var total = status ? Number(status.total) : 0
   if (state === "active") {
-    var speed = status && status.speed ? formatSpeed(status.speed) : ""
+    var speed = status && status.speed ? formatSpeed(status.speed, unit) : ""
     var parts = []
     if (p >= 0) parts.push(formatBytes(done) + " / " + formatBytes(total))
     else parts.push(formatBytes(done))
     if (speed) {
       var cap = entry ? Number(entry.speedLimit) : 0
-      parts.push(cap > 0 ? speed + " (" + formatSpeed(cap) + ")" : speed)
+      parts.push(cap > 0 ? speed + " (" + formatSpeed(cap, unit) + ")" : speed)
     }
     if (status && status.eta > 0) parts.push(formatEta(status.eta))
     return parts.join(" \u00b7 ")
@@ -159,6 +178,7 @@ if (typeof module !== "undefined") {
     clamp: clamp,
     formatBytes: formatBytes,
     formatSpeed: formatSpeed,
+    formatSpeedBits: formatSpeedBits,
     formatEta: formatEta,
     percent: percent,
     isValidUrl: isValidUrl,
