@@ -794,9 +794,16 @@ Item {
     id: notifProc
   }
 
+  readonly property string _linkScript: "\n" +
+    '  mkdir -p "$(dirname "$2")"\n' +
+    '  if [ -e "$2" ] || [ -L "$2" ]; then\n' +
+    '    [ "$(readlink "$2" 2>/dev/null)" = "$1" ] || exit 0\n' +
+    '  fi\n' +
+    '  ln -sfn "$1" "$2"\n'
+
   Process {
     id: symlinkProc
-    command: ["bash", "-c", 'mkdir -p "$(dirname "$2")"; ln -sfn "$1" "$2"', "dm-link", root.cliScript, root.cliBin]
+    command: ["bash", "-c", root._linkScript, "dm-link", root.cliScript, root.cliBin]
   }
 
   Process {

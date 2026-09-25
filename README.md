@@ -92,6 +92,10 @@ omarchy-dl clear                                       # clear final-state entri
 `--speed` is always in **KB/s** (`--speed 500` = 500 KB/s = 4 Mb/s), independent
 of the unit shown in the panel.
 
+The symlink is only created when that name is free. If something else already
+occupies `~/.local/bin/omarchy-dl`, the plugin leaves it alone and skips the
+link — run `dm-cli.sh` from the plugin folder directly instead.
+
 ## Architecture
 
 ```
