@@ -102,7 +102,7 @@ Item {
 
     var d = Model.normalizeDir(dir || root.settings.defaultDir, root.home)
     var seg = Number(segments || 0) > 0 ? Model.clamp(segments, 1, 16) : Model.clamp(root.settings.segments, 1, 16)
-    var spd = Number(speed || 0) >= 0
+    var spd = (typeof speed === "number" && !isNaN(speed))
       ? Model.clamp(speed, 0, 1073741824)
       : Model.clamp(root.settings.speedLimit, 0, 1073741824)
 
@@ -264,6 +264,7 @@ Item {
     _setState(id, "cancelled", false)
     _runDm(["cancel", id])
     root._persistPending = true
+    root.cleanupOrphans()
   }
 
   function retry(id) {
@@ -301,6 +302,14 @@ Item {
     root.persist()
     if (e) _runDm(["remove", id, e.dir, e.filename])
     else _runDm(["cancel", id])
+    root.cleanupOrphans()
+  }
+
+  function cleanupOrphans() {
+    var ids = []
+    for (var i = 0; i < root.downloads.length; i++) ids.push(root.downloads[i].id)
+    cleanProc.command = ["bash", root.dmScript, "cleanup"].concat(ids)
+    cleanProc.running = true
   }
 
   function clearFinished() {
@@ -408,7 +417,7 @@ Item {
           req.url || "",
           req.dir || "",
           req.segments ? Number(req.segments) : 0,
-          req.speed ? Number(req.speed) * 1024 : 0)
+          req.speed ? Number(req.speed) * 1024 : undefined)
         break
       case "pause": root.pause(req.id); break
       case "resume": root.resume(req.id); break
@@ -482,8 +491,10 @@ Item {
       }
     }
 
-    // overlay live byte-derived progress for active downloads so speed, size,
-    // percent and ETA refresh between aria2's 1s summary writes
+    // Live overlay for active downloads: speed stays smooth/refreshed between
+    // aria2's 1s summaries, while completed/percent/ETA prefer aria2's own
+    // (accurate) numbers and only fall back to file-size deltas before the
+    // first summary arrives.
     var fast = {}
     for (var bid in bytes) {
       var e = root.entryById(bid)
@@ -506,12 +517,19 @@ Item {
       }
       root._sizePrev[bid] = { bytes: b, ts: now, speed: blended }
       if (total > 0) root._lastTotal[bid] = total
-      var pct = total > 0 ? Math.max(0, Math.min(100, Math.floor(b / total * 100))) : -1
-      var eta = (blended > 0 && total > b) ? Math.round((total - b) / blended) : -1
+      var disp = blended
+      if (disp <= 0 && base.speed > 0 && now - (base.ts || 0) * 1000 < 30000) {
+        disp = base.speed
+      }
+      var done = (base.completed > 0) ? base.completed : b
+      var pct = (base.percent >= 0) ? base.percent
+        : (total > 0 ? Math.max(0, Math.min(100, Math.floor(done / total * 100))) : -1)
+      var eta = (base.eta > 0) ? base.eta
+        : (blended > 0 && total > done) ? Math.round((total - done) / blended) : -1
       fast[bid] = {
         id: bid, state: "active",
-        completed: b, total: total, percent: pct,
-        speed: Math.round(blended), eta: eta, error: base.error || "",
+        completed: done, total: total, percent: pct,
+        speed: Math.round(disp), eta: eta, error: base.error || "",
         ts: Math.round(now / 1000), dir: base.dir, file: base.file, conn: base.conn || 0
       }
     }
@@ -695,6 +713,7 @@ Item {
         } catch (e) {}
         root.ready = true
         root.reconcile()
+        root.cleanupOrphans()
       }
     }
   }
@@ -740,6 +759,10 @@ Item {
 
   Process {
     id: actProc
+  }
+
+  Process {
+    id: cleanProc
   }
 
   Process {

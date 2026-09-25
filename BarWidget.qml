@@ -515,6 +515,7 @@ BarWidget {
                   QtObject {
                     id: rowCtx
                     property var st: svc ? (svc.statuses[modelData.id] || null) : null
+                    property int segCount: modelData ? (modelData.segments > 0 ? modelData.segments : 0) : 0
                   }
 
                   MouseArea {
@@ -575,7 +576,7 @@ BarWidget {
 
                       Item {
                         width: parent.width
-                        height: Style.space(4)
+                        height: Style.space(5)
 
                         Rectangle {
                           anchors.fill: parent
@@ -600,20 +601,21 @@ BarWidget {
                         }
 
                         Repeater {
-                          model: (rowCtx.st && rowCtx.st.total > 0 && modelData.segments > 1)
-                            ? Math.max(0, modelData.segments - 1)
-                            : 0
+                          model: (rowCtx.st && rowCtx.st.total > 0 && rowCtx.segCount > 1) ? (function() {
+                            var p = Model.percent(rowCtx.st.completed, rowCtx.st.total)
+                            return p >= 0 && p < 100 ? Math.max(0, rowCtx.segCount - 1) : 0
+                          })() : 0
 
                           Rectangle {
                             required property int index
-                            x: (parent.width / modelData.segments) * (index + 1) - 1
-                            width: 1
+                            x: (parent.width / rowCtx.segCount) * (index + 1) - 1
+                            width: 2
                             height: parent.height
                             color: Qt.rgba(
-                              1 - root.bar.foreground.r,
-                              1 - root.bar.foreground.g,
-                              1 - root.bar.foreground.b,
-                              0.25)
+                              root.bar.foreground.r,
+                              root.bar.foreground.g,
+                              root.bar.foreground.b,
+                              0.15)
                           }
                         }
                       }

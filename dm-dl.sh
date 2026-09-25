@@ -19,6 +19,7 @@
 #   dm-dl.sh cancel-all
 #   dm-dl.sh remove <id> <dir> <filename>   (terminates and deletes the file + history)
 #   dm-dl.sh is-running <id>
+#   dm-dl.sh cleanup <id...>   (known ids; kill + drop everything else in runtime)
 
 set -u
 
@@ -221,6 +222,37 @@ cmd_is_running() {
   exit 1
 }
 
+cmd_cleanup() {
+  # Known ids are entries still tracked in the queue; everything else found in
+  # the runtime dir is an orphan from a removed entry: stop + kill its aria2/
+  # wrapper processes and remove their state files. Files downloaded to disk
+  # are never touched.
+  local known=""
+  local a
+  for a in "$@"; do known="$known $a "; done
+  local id="" p=""
+  for f in "$RUNTIME"/*.aria2.pid "$RUNTIME"/*.wrapper.pid; do
+    [ -f "$f" ] || continue
+    id="${f##*/}"
+    id="${id%.aria2.pid}"
+    id="${id%.wrapper.pid}"
+    case "$known" in *" $id "*) continue ;; esac
+    p=$(cat "$f" 2>/dev/null || true)
+    [[ -n "$p" ]] && { kill -CONT "$p" 2>/dev/null || true; kill -9 "$p" 2>/dev/null || true; }
+    rm -f "$RUNTIME/$id.aria2.pid" "$RUNTIME/$id.wrapper.pid"
+  done
+  for f in "$RUNTIME"/*.status.json "$RUNTIME"/*.cancelled "$RUNTIME"/*.out "$RUNTIME"/*.wrapper.log; do
+    [ -e "$f" ] || continue
+    id="${f##*/}"
+    id="${id%.status.json}"
+    id="${id%.cancelled}"
+    id="${id%.out}"
+    id="${id%.wrapper.log}"
+    case "$known" in *" $id "*) continue ;; esac
+    rm -f "$f"
+  done
+}
+
 cmd_remove() {
   [[ $# -ge 3 ]] || die "remove requires <id> <dir> <file>"
   local id="$1" dir="$2" file="$3"
@@ -244,5 +276,6 @@ case "${1:-}" in
   cancel-all) cmd_cancel_all ;;
   remove) shift; cmd_remove "$@" ;;
   is-running) shift; cmd_is_running "$@" ;;
-  *) die "usage: $0 {start|run|pause|resume|cancel|cancel-all|is-running}" ;;
+  cleanup) shift; cmd_cleanup "$@" ;;
+  *) die "usage: $0 {start|run|pause|resume|cancel|cancel-all|is-running|cleanup}" ;;
 esac

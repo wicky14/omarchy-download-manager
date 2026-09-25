@@ -123,12 +123,13 @@ function describe(entry, status) {
   var total = status ? Number(status.total) : 0
   if (state === "active") {
     var speed = status && status.speed ? formatSpeed(status.speed) : ""
-    var conn = status && Number(status.conn) > 0 ? Number(status.conn) : 0
     var parts = []
     if (p >= 0) parts.push(formatBytes(done) + " / " + formatBytes(total))
     else parts.push(formatBytes(done))
-    if (speed) parts.push(speed)
-    if (conn > 0) parts.push(conn + " conn")
+    if (speed) {
+      var cap = entry ? Number(entry.speedLimit) : 0
+      parts.push(cap > 0 ? speed + " (" + formatSpeed(cap) + ")" : speed)
+    }
     if (status && status.eta > 0) parts.push(formatEta(status.eta))
     return parts.join(" \u00b7 ")
   }
