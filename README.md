@@ -1,5 +1,7 @@
 # Download Manager (omarchy)
 
+<img width="458" height="409" alt="download-manager" src="https://github.com/user-attachments/assets/8c30a539-4cc6-4734-b87c-8e620c85a8df" />
+
 An IDM-style download manager for the Omarchy bar: download files directly from
 a button in the top bar or from the CLI.
 
