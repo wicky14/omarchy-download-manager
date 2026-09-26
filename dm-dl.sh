@@ -10,6 +10,12 @@
 # cancel marks a flag and kills both the downloader and this wrapper. Resume
 # after interruption is handled by aria2's --continue + .aria2 control file.
 #
+# Pids are kept in `$RUNTIME/<id>.aria2.pid` / `$RUNTIME/<id>.wrapper.pid`, one
+# `<pid> <starttime>` record per line. Every signal re-checks that the pid still
+# has that start time and the expected process identity before it is sent, so a
+# record left behind by a crash or a pid reuse can never reach an unrelated
+# process.
+#
 # Usage:
 #   dm-dl.sh start  <id> <url> <dir> <filename> <segments> <speedBps>
 #   dm-dl.sh run    <id> <url> <dir> <filename> <segments> <speedBps>   (internal)
@@ -24,6 +30,7 @@
 set -u
 
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_NAME="${0##*/}"
 PARSER="$PLUGIN_DIR/dm-status.awk"
 RUNTIME="${XDG_RUNTIME_DIR:-/tmp}/omarchy-download-manager"
 
@@ -44,6 +51,99 @@ write_status() {
 read_int() {
   local f="$1" name="$2"
   sed -n "s/.*\"$name\":\s*\([0-9-]*\).*/\1/p" "$f" | head -n1
+}
+
+# ---- process records -------------------------------------------------------
+# Every download keeps two records, one line each, written when its process is
+# spawned: "<pid> <starttime>". starttime is field 22 of /proc/<pid>/stat (ticks
+# since boot); together with the pid it names exactly one process, so a record
+# left behind by a crash or a reboot can never match the process that inherited
+# the number. No signal is ever sent to a pid whose record does not verify.
+
+proc_starttime() {
+  local p="$1" st
+  case "$p" in ''|*[!0-9]*) return 1 ;; esac
+  st=$(cat "/proc/$p/stat" 2>/dev/null) || return 1
+  [[ -n "$st" ]] || return 1
+  st=${st##*') '}
+  # shellcheck disable=SC2086
+  set -- $st # fields 3.. of stat, so starttime is the 20th of these
+  [[ $# -ge 20 ]] || return 1
+  printf '%s' "${20}"
+}
+
+write_pid_rec() {
+  local f="$1" p="$2" st=""
+  local t="$f.tmp"
+  st=$(proc_starttime "$p" 2>/dev/null) || st=""
+  printf '%s %s\n' "$p" "$st" > "$t" 2>/dev/null && mv -f "$t" "$f"
+}
+
+# Checks a record against the live process table.
+#   exit 0  verified, stdout is "<pid> <starttime>"
+#   exit 1  no record, or the process it names is gone
+#   exit 2  record present but not trustworthy: the pid belongs to a different
+#           process, or the record carries no start time to compare
+pid_rec_live() {
+  local f="$1" kind="$2" id="$3" rec="" p st
+  local -a argv=()
+  local i
+  [[ -f "$f" ]] || return 1
+  IFS= read -r rec < "$f" 2>/dev/null || return 1
+  read -r p st <<< "$rec"
+  case "$p" in
+    ''|*[!0-9]*)
+      echo "dm-dl.sh: $id: refusing to signal: malformed record $f" >&2
+      return 2
+      ;;
+  esac
+  [[ -d "/proc/$p" ]] || return 1
+  if [[ "$kind" == "aria2" ]]; then
+    if [[ "$(cat "/proc/$p/comm" 2>/dev/null)" != "aria2c" ]]; then
+      echo "dm-dl.sh: $id: refusing to signal pid $p: not aria2c" >&2
+      return 2
+    fi
+  else
+    # The wrapper is always "<bash> <path>/dm-dl.sh run <id> <url> ...". Match
+    # whole argv words so any spelling of the path still identifies it, and the
+    # id proves which download it belongs to.
+    mapfile -d '' -t argv < "/proc/$p/cmdline" 2>/dev/null || true
+    for ((i = 0; i + 2 < ${#argv[@]}; i++)); do
+      [[ "${argv[i]##*/}" == "$SCRIPT_NAME" ]] || continue
+      [[ "${argv[i + 1]}" == "run" && "${argv[i + 2]}" == "$id" ]] && break
+    done
+    if ((i + 2 >= ${#argv[@]})); then
+      echo "dm-dl.sh: $id: refusing to signal pid $p: not this download's wrapper" >&2
+      return 2
+    fi
+  fi
+  if [[ -z "$st" ]]; then
+    echo "dm-dl.sh: $id: refusing to signal pid $p: record has no start time" >&2
+    return 2
+  fi
+  if [[ "$(proc_starttime "$p" 2>/dev/null)" != "$st" ]]; then
+    echo "dm-dl.sh: $id: refusing to signal pid $p: pid was reused by another process" >&2
+    return 2
+  fi
+  printf '%s %s' "$p" "$st"
+}
+
+# signal_pid_rec <file> <aria2|wrapper> <id> <signal>...
+# Signals only while the record verifies. A record that does not is dropped
+# instead, so a stale one can never be used again, and the reason is reported on
+# stderr by pid_rec_live.
+signal_pid_rec() {
+  local f="$1" kind="$2" id="$3"
+  shift 3
+  local live="" p st rc=0
+  live=$(pid_rec_live "$f" "$kind" "$id") || rc=$?
+  if (( rc != 0 )); then
+    rm -f "$f"
+    return "$rc"
+  fi
+  read -r p st <<< "$live"
+  kill "$@" -- "$p" 2>/dev/null || true
+  return 0
 }
 
 aria2_rc_msg() {
@@ -77,7 +177,7 @@ cmd_run() {
   local id="$1" url="$2" dir="$3" file="$4" segments="$5" speed="$6"
   mkdir -p "$RUNTIME" 2>/dev/null
   mkdir -p "$dir" 2>/dev/null
-  echo "$$" > "$RUNTIME/$id.wrapper.pid"
+  write_pid_rec "$RUNTIME/$id.wrapper.pid" "$$"
 
   write_status "$id" active 0 0 -1 0 -1 ""
 
@@ -126,7 +226,7 @@ cmd_run() {
 
     aria2c "${opts[@]}" "$url" > "$fifo" 2>&1 &
     apid=$!
-    echo "$apid" > "$RUNTIME/$id.aria2.pid"
+    write_pid_rec "$RUNTIME/$id.aria2.pid" "$apid"
 
     gawk -v id="$id" -v out="$RUNTIME/$id.status.json" -v dir="$dir" -v file="$file" \
       -f "$PARSER" < "$fifo" &
@@ -186,24 +286,20 @@ cmd_run() {
 }
 
 cmd_pause() {
-  local id="$1" p
-  p=$(cat "$RUNTIME/$id.aria2.pid" 2>/dev/null || true)
-  [[ -n "$p" ]] && kill -STOP "$p" 2>/dev/null || true
+  local id="$1"
+  signal_pid_rec "$RUNTIME/$id.aria2.pid" aria2 "$id" -STOP
 }
 
 cmd_resume() {
-  local id="$1" p
-  p=$(cat "$RUNTIME/$id.aria2.pid" 2>/dev/null || true)
-  [[ -n "$p" ]] && kill -CONT "$p" 2>/dev/null || true
+  local id="$1"
+  signal_pid_rec "$RUNTIME/$id.aria2.pid" aria2 "$id" -CONT
 }
 
 cmd_cancel() {
-  local id="$1" ap wp
+  local id="$1"
   touch "$RUNTIME/$id.cancelled" 2>/dev/null || true
-  ap=$(cat "$RUNTIME/$id.aria2.pid" 2>/dev/null || true)
-  wp=$(cat "$RUNTIME/$id.wrapper.pid" 2>/dev/null || true)
-  [[ -n "$ap" ]] && kill "$ap" 2>/dev/null || true
-  [[ -n "$wp" ]] && kill "$wp" 2>/dev/null || true
+  signal_pid_rec "$RUNTIME/$id.aria2.pid" aria2 "$id" -TERM
+  signal_pid_rec "$RUNTIME/$id.wrapper.pid" wrapper "$id" -TERM
 }
 
 cmd_cancel_all() {
@@ -216,29 +312,36 @@ cmd_cancel_all() {
 }
 
 cmd_is_running() {
-  local id="$1" wp
-  wp=$(cat "$RUNTIME/$id.wrapper.pid" 2>/dev/null || true)
-  if [[ -n "$wp" ]] && kill -0 "$wp" 2>/dev/null; then exit 0; fi
-  exit 1
+  local id="$1"
+  pid_rec_live "$RUNTIME/$id.wrapper.pid" wrapper "$id" >/dev/null || exit 1
+  exit 0
 }
 
 cmd_cleanup() {
   # Known ids are entries still tracked in the queue; everything else found in
   # the runtime dir is an orphan from a removed entry: stop + kill its aria2/
   # wrapper processes and remove their state files. Files downloaded to disk
-  # are never touched.
+  # are never touched. A pid is only signalled while its record still verifies,
+  # so an orphan left by a crash can never hit an unrelated process.
   local known=""
   local a
   for a in "$@"; do known="$known $a "; done
-  local id="" p=""
+  local seen="$known"
+  local id="" f=""
   for f in "$RUNTIME"/*.aria2.pid "$RUNTIME"/*.wrapper.pid; do
     [ -f "$f" ] || continue
     id="${f##*/}"
     id="${id%.aria2.pid}"
     id="${id%.wrapper.pid}"
-    case "$known" in *" $id "*) continue ;; esac
-    p=$(cat "$f" 2>/dev/null || true)
-    [[ -n "$p" ]] && { kill -CONT "$p" 2>/dev/null || true; kill -9 "$p" 2>/dev/null || true; }
+    case "$seen" in *" $id "*) continue ;; esac
+    seen="$seen$id "
+    # CONT first so a stopped download can act on the KILL that follows. Each
+    # record is dropped as soon as it fails to verify, which also makes the
+    # second call for the same record a no-op.
+    signal_pid_rec "$RUNTIME/$id.aria2.pid" aria2 "$id" -CONT
+    signal_pid_rec "$RUNTIME/$id.aria2.pid" aria2 "$id" -KILL
+    signal_pid_rec "$RUNTIME/$id.wrapper.pid" wrapper "$id" -CONT
+    signal_pid_rec "$RUNTIME/$id.wrapper.pid" wrapper "$id" -KILL
     rm -f "$RUNTIME/$id.aria2.pid" "$RUNTIME/$id.wrapper.pid"
   done
   for f in "$RUNTIME"/*.status.json "$RUNTIME"/*.cancelled "$RUNTIME"/*.out "$RUNTIME"/*.wrapper.log; do
@@ -256,11 +359,8 @@ cmd_cleanup() {
 cmd_remove() {
   [[ $# -ge 3 ]] || die "remove requires <id> <dir> <file>"
   local id="$1" dir="$2" file="$3"
-  local ap wp
-  ap=$(cat "$RUNTIME/$id.aria2.pid" 2>/dev/null || true)
-  wp=$(cat "$RUNTIME/$id.wrapper.pid" 2>/dev/null || true)
-  [[ -n "$ap" ]] && kill "$ap" 2>/dev/null || true
-  [[ -n "$wp" ]] && kill "$wp" 2>/dev/null || true
+  signal_pid_rec "$RUNTIME/$id.aria2.pid" aria2 "$id" -TERM
+  signal_pid_rec "$RUNTIME/$id.wrapper.pid" wrapper "$id" -TERM
   [[ -n "$dir" && "$dir" != "/" && -n "$file" && "$file" != */* ]] || return 1
   rm -f -- "$dir/$file" "$dir/$file.aria2"
   rm -f "$RUNTIME/$id.status.json" "$RUNTIME/$id.cancelled" \

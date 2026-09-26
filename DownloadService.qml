@@ -674,8 +674,9 @@ Item {
     '  for f in "$rt"/*.wrapper.pid; do\n' +
     '    [ -f "$f" ] || continue\n' +
     '    id=${f##*/}; id=${id%.wrapper.pid}\n' +
+    '    read -r pid _rest < "$f" 2>/dev/null || pid=\n' +
     '    alive=0\n' +
-    '    kill -0 "$(cat "$f")" 2>/dev/null && alive=1\n' +
+    '    [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && alive=1\n' +
     '    printf "W %s %s\\n" "$id" "$alive"\n' +
     '  done\n'
 
@@ -684,8 +685,9 @@ Item {
     '  for f in "$rt"/*.wrapper.pid; do\n' +
     '    [ -f "$f" ] || continue\n' +
     '    id=${f##*/}; id=${id%.wrapper.pid}\n' +
+    '    read -r pid _rest < "$f" 2>/dev/null || pid=\n' +
     '    alive=0\n' +
-    '    kill -0 "$(cat "$f")" 2>/dev/null && alive=1\n' +
+    '    [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && alive=1\n' +
     '    printf "W %s %s\\n" "$id" "$alive"\n' +
     '  done\n'
 

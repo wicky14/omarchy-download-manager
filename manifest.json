@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "omakid.download-manager",
   "name": "Download Manager",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "author": "omakid",
   "license": "MIT",
   "description": "IDM-style download manager for the Omarchy bar: aria2 engine, parallel slots, pause/resume, and an 'omarchy-dl' CLI.",

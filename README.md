@@ -129,6 +129,11 @@ uninstall.sh        Full interactive uninstall.
   entries that lost their wrapper as `error` with "retry to continue" — click
   **retry** (or `retry <id>`) and aria2 resumes from the saved `.aria2` control
   file at the exact byte offset.
+- Each pid file is a `<pid> <starttime>` record (`starttime` is field 22 of
+  `/proc/<pid>/stat`). Every STOP/CONT/TERM/KILL re-checks the recorded start
+  time and the process identity (`comm` is `aria2c`, or the wrapper's cmdline
+  is `dm-dl.sh run <id>`) before signalling, so a pid file left behind by a
+  crash, a reboot or a pid reuse is dropped instead of being signalled.
 
 ## Storage
 
@@ -136,7 +141,7 @@ uninstall.sh        Full interactive uninstall.
 | --- | ------ |
 | Queue & settings | `~/.config/omarchy/omakid.download-manager/queue.json` |
 | Per-download status | `$XDG_RUNTIME_DIR/omarchy-download-manager/*.status.json` |
-| Wrapper / aria2 pids | `$XDG_RUNTIME_DIR/omarchy-download-manager/*.pid` |
+| Wrapper / aria2 pids | `$XDG_RUNTIME_DIR/omarchy-download-manager/*.pid` (`<pid> <starttime>` records) |
 | CLI requests | `.../cli.jsonl` |
 | CLI symlink | `~/.local/bin/omarchy-dl` |
 
